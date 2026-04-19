@@ -19,21 +19,29 @@ typedef short bool;
 
 typedef struct PCB
 {
-    int id; 
+    int id;
     int arrival_time;
     int runtime;
     int priority;
+
     int state;
+
     int remaining_time;
     int waiting_time;
-    int pid; 
+
+    int pid;
+
     int start_time;
-    int finished_time;
-    int stopped_time;
-    int restarted_time;
-    int remainingTimeAfterStop;
-    int startaddress;
-    int endaddress;
+    int finish_time;
+    int last_start_time;
+
+    int executed_time;
+
+    int TA;
+    float WTA;
+
+    struct PCB *next;
+    struct PCB *prev;
 } PCB;
 
 typedef struct Node
