@@ -35,6 +35,20 @@ int main(int argc, char * argv[])
     printf("2 - Highest Priority First (HPF)\n");
     printf("3 - Round Robin (RR)\n");
     printf("Please enter the number corresponding to your choice: ");
+    int chosensched;
+    scanf("%d", &chosensched);
+    int quantum;
+    if (chosenAlgorithm == 3)
+    {
+        printf("Enter quantum: ");
+        scanf("%d", &quantum);
+        while (quantum < 0)
+        {
+            printf("Quantum must greater than or equal zero!\n");
+            printf("Enter the quantum for Round Robin (RR): ");
+            scanf("%d", &quantum);
+        }
+    }
 
     // 3. Initiate and create the scheduler and clock processes.
     // 4. Use this function after creating the clock process to initialize clock
