@@ -3,18 +3,29 @@
 /* Modify this file as needed*/
 int remainingtime;
 
-int main(int agrc, char * argv[])
+
+int main(int argc, char *argv[])
 {
     initClk();
-    
-    //TODO it needs to get the remaining time from somewhere
-    //remainingtime = ??;
+
+    int remainingtime = atoi(argv[1]);
+
+    int lastClk = getClk();
+
     while (remainingtime > 0)
     {
-        // remainingtime = ??;
+        int now = getClk();
+
+        if (now != lastClk)
+        {
+            remainingtime--;
+            lastClk = now;
+        }
     }
-    
+
+    // tell scheduler I finished
+    kill(getppid(), SIGUSR1);
+
     destroyClk(false);
-    
     return 0;
 }
