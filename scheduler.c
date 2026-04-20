@@ -4,6 +4,46 @@
 int main(int argc, char * argv[])
 {
     initClk();
+    int algo = atoi(argv[1]);
+    int quantum = atoi(argv[2]);
+
+
+
+    int msgq_id = msgget(MSGKEY, 0666);
+    if (msgq_id == -1)
+    {
+        perror("msgget failed");
+        destroyClk(false);
+        return 1;
+    }
+
+    switch (algo)
+    {
+        case 1:
+            /* Preemptive HPF */
+            runHPF(msgq_id);
+            break;
+
+        case 2:
+            /* RR */
+            runRR(msgq_id, quantum);
+            break;
+
+        case 3:
+            /* FCFS if you have it */
+            runFCFS(msgq_id);
+            break;
+
+        default:
+            printf("Invalid algorithm number\n");
+            break;
+    }
+
+    //TODO implement the scheduler :)
+    //upon termination release the clock resources.
+    destroyClk(false);
+    return 0;
+}
     
 
 
@@ -189,5 +229,5 @@ int main(int argc, char * argv[])
     //TODO implement the scheduler :)
     //upon termination release the clock resources.
     
-    destroyClk(true);
-}
+   
+
