@@ -144,20 +144,20 @@ int main(int argc, char * argv[])
 
             if (result == currentProcess->pid && WIFEXITED(status))
             {
-                int ran = now - currentProcess->last_start_time;
-                if (ran < 0) ran = 0;
+                int oldRemaining = currentProcess->remaining_time;
+                int finishTime = currentProcess->last_start_time + oldRemaining;
 
-                currentProcess->executed_time += ran;
+                currentProcess->executed_time += oldRemaining;
                 currentProcess->remaining_time = 0;
-                currentProcess->finish_time = now;
+                currentProcess->finish_time = finishTime;
                 currentProcess->TA = currentProcess->finish_time - currentProcess->arrival_time;
                 currentProcess->waiting_time = currentProcess->TA - currentProcess->runtime;
-                currentProcess->WTA = (float)currentProcess->TA / currentProcess->runtime;
+                currentProcess->WTA = (float) currentProcess->TA / currentProcess->runtime;
                 currentProcess->state = FINISHED;
 
                 fprintf(logFile,
                         "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
-                        now,
+                        finishTime,
                         currentProcess->id,
                         currentProcess->arrival_time,
                         currentProcess->runtime,
@@ -170,15 +170,14 @@ int main(int argc, char * argv[])
                 currentProcess = NULL;
                 childFinished = 0;
 
-                /* if something is waiting, start 1-second context switch */
                 if (!isPriorityQueueEmpty(readyQueue))
                 {
                     switching = 1;
-                    switchEndTime = now + 1;
+                    switchEndTime = finishTime + 1;
                     nextAfterSwitch = dequeuePriQueue(readyQueue);
                 }
             }
-        continue;
+            continue;
         }
 
         /* 3) preemptive HPF: stop current process if a better one exists */
