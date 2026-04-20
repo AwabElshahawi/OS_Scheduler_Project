@@ -1,26 +1,44 @@
 #include "headers.h"
 
-/* Modify this file as needed*/
 int remainingtime;
+int lastClk;
+volatile sig_atomic_t resumedFlag = 0;
 
+void handleCont(int signum)
+{
+    resumedFlag = 1;
+}
 
 int main(int argc, char *argv[])
 {
     initClk();
+    signal(SIGCONT, handleCont);
 
-    int remainingtime = atoi(argv[1]);
-
-    int lastClk = getClk();
+    remainingtime = atoi(argv[1]);
+    lastClk = getClk();
 
     while (remainingtime > 0)
     {
-        sleep(1);
+        if (resumedFlag)
+        {
+            lastClk = getClk();
+            resumedFlag = 0;
+        }
+
+        while (getClk() == lastClk)
+        {
+            if (resumedFlag)
+            {
+                lastClk = getClk();
+                resumedFlag = 0;
+            }
+        }
+
+        lastClk = getClk();
         remainingtime--;
     }
 
-    // tell scheduler I finished
     kill(getppid(), SIGUSR1);
-
     destroyClk(false);
     return 0;
 }

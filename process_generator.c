@@ -12,7 +12,6 @@ void clearResources(int signum)
 int main(int argc, char *argv[])
 {
     signal(SIGINT, clearResources);
-
     if (argc < 2)
     {
         printf("Usage: %s <input file>\n", argv[0]);
@@ -99,6 +98,7 @@ sleep(1);
         ProcessData *p = peekQueue(processes);
         int now = getClk();
         usleep(100000); // Sleep for 100ms to reduce CPU usage
+       
         if (p->arrival_time == now)
         {
             ProcessData *sent = NULL;
