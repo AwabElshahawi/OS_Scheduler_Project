@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 
 typedef short bool;
 #define true 1
@@ -26,7 +27,7 @@ typedef struct
 
 typedef struct PCB
 {
-    int id;
+    int id; 
     int arrival_time;
     int runtime;
     int priority;
