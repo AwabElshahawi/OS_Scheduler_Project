@@ -439,40 +439,73 @@ void runRR(int msgq_id, int quantum)
 
         /* 2) If current process finished naturally, finalize it */
         if (currentProcess != NULL)
+{
+    /* Update remaining_time every tick based on elapsed time */
+    int ran = now - currentProcess->last_start_time;
+    int updatedRemaining = currentProcess->runtime - currentProcess->executed_time - ran;
+
+    if (updatedRemaining <= 0)
+    {
+        /* Process must be finishing — block until it exits */
+        int status;
+        waitpid(currentProcess->pid, &status, 0);
+
+        currentProcess->executed_time  += ran;
+        currentProcess->remaining_time  = 0;
+        currentProcess->finish_time     = now;
+        currentProcess->TA              = now - currentProcess->arrival_time;
+        currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
+        currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
+        currentProcess->state           = FINISHED;
+
+        fprintf(logFile,
+                "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
+                now,
+                currentProcess->id,
+                currentProcess->arrival_time,
+                currentProcess->runtime,
+                currentProcess->waiting_time,
+                currentProcess->TA,
+                currentProcess->WTA);
+        fflush(logFile);
+
+        free(currentProcess);
+        currentProcess = NULL;
+        quantumStart   = -1;
+    }
+    else
+    {
+        /* Not done yet — try non-blocking waitpid as a safety net */
+        int status;
+        pid_t result = waitpid(currentProcess->pid, &status, WNOHANG);
+
+        if (result == currentProcess->pid && WIFEXITED(status))
         {
-            int status;
-            pid_t result = waitpid(currentProcess->pid, &status, WNOHANG);
+            currentProcess->executed_time  += ran;
+            currentProcess->remaining_time  = 0;
+            currentProcess->finish_time     = now;
+            currentProcess->TA              = now - currentProcess->arrival_time;
+            currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
+            currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
+            currentProcess->state           = FINISHED;
 
-            if (result == currentProcess->pid && WIFEXITED(status))
-            {
-                int ran = now - currentProcess->last_start_time;
-                if (ran < 0) ran = 0;
+            fprintf(logFile,
+                    "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
+                    now,
+                    currentProcess->id,
+                    currentProcess->arrival_time,
+                    currentProcess->runtime,
+                    currentProcess->waiting_time,
+                    currentProcess->TA,
+                    currentProcess->WTA);
+            fflush(logFile);
 
-                currentProcess->executed_time  += ran;
-                currentProcess->remaining_time  = 0;
-                currentProcess->finish_time     = now;
-                currentProcess->TA              = now - currentProcess->arrival_time;
-                currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
-                currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
-                currentProcess->state           = FINISHED;
-
-                fprintf(logFile,
-                        "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
-                        now,
-                        currentProcess->id,
-                        currentProcess->arrival_time,
-                        currentProcess->runtime,
-                        currentProcess->waiting_time,
-                        currentProcess->TA,
-                        currentProcess->WTA);
-                fflush(logFile);
-
-                free(currentProcess);
-                currentProcess = NULL;
-                quantumStart   = -1;
-            }
+            free(currentProcess);
+            currentProcess = NULL;
+            quantumStart   = -1;
         }
-
+    }
+}
         /* 3) RR preemption: quantum expired and a process is still running */
         if (currentProcess != NULL && (now - quantumStart) >= quantum)
         {
