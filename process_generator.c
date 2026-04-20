@@ -1,11 +1,3 @@
-#include "headers.h"
-
-void clearResources(int);
-
-int main(int argc, char * argv[])
-{
-    void clearResources(int);
-
 int msgq_id = -1;
 
 int main(int argc, char *argv[])
@@ -62,20 +54,86 @@ int main(int argc, char *argv[])
             scanf("%d", &quantum);
         }
     }
-    // 3. Initiate and create the scheduler and clock processes.
-    // 4. Use this function after creating the clock process to initialize clock
+
+    msgq_id = msgget(MSGKEY, IPC_CREAT | 0666);
+    if (msgq_id == -1)
+    {
+        perror("msgget failed");
+        exit(1);
+    }
+
+    pid_t clk_pid = fork();
+    if (clk_pid == 0)
+    {
+        execl("./clk.out", "clk.out", NULL);
+        perror("execl clk failed");
+        exit(1);
+    }
+
+    pid_t scheduler_pid = fork();
+    if (scheduler_pid == 0)
+    {
+        char algoStr[10], quantumStr[10];
+        sprintf(algoStr, "%d", chosensched);
+        sprintf(quantumStr, "%d", quantum);
+
+        execl("./scheduler.out", "scheduler.out", algoStr, quantumStr, NULL);
+        perror("execl scheduler failed");
+        exit(1);
+    }
+
     initClk();
-    // To get time use this
-    int x = getClk();
-    printf("current time is %d\n", x);
-    // TODO Generation Main Loop
-    // 5. Create a data structure for processes and provide it with its parameters.
-    // 6. Send the information to the scheduler at the appropriate time.
-    // 7. Clear clock resources
+
+    int lastClk = -1;
+
+    while (!isEmpty(processes))
+    {
+        int now = getClk();
+        if (now == lastClk)
+            continue;
+        lastClk = now;
+
+        while (!isEmpty(processes))
+        {
+            ProcessData *p = peekQueue(processes);
+
+            if (p->arrival_time <= now)
+            {
+                ProcessData *sent = NULL;
+                dequeue(processes, &sent);
+
+                ProcessMessage msg;
+                msg.mtype = 1;
+                msg.isLast = 0;
+                msg.p = *sent;
+
+                if (msgsnd(msgq_id, &msg, sizeof(ProcessMessage) - sizeof(long), !IPC_NOWAIT) == -1)
+                    perror("msgsnd failed");
+
+                free(sent);
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
+    ProcessMessage endMsg;
+    endMsg.mtype = 1;
+    endMsg.isLast = 1;
+
+    if (msgsnd(msgq_id, &endMsg, sizeof(ProcessMessage) - sizeof(long), !IPC_NOWAIT) == -1)
+        perror("msgsnd end failed");
+
+    waitpid(scheduler_pid, NULL, 0);
+
     destroyClk(true);
+    return 0;
 }
 
 void clearResources(int signum)
 {
-    //TODO Clears all resources in case of interruption
+    if (msgq_id != -1)
+        msgctl(msgq_id, IPC_RMID, NULL);
 }
