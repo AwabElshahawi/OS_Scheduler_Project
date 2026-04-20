@@ -21,10 +21,6 @@ typedef short bool;
 
 #define SHKEY 300
 
-#define STATE_STOPPED 0
-#define STATE_FINISHED 1
-#define STATE_READY 2
-#define STATE_RUNNING 3
 typedef struct
 {
     int id;
@@ -33,6 +29,14 @@ typedef struct
     int priority;
 } ProcessData;
 
+typedef enum State
+{
+    STOPPED,
+    FINISHED,
+    STARTED,
+    RESUMED
+} State;
+
 typedef struct PCB
 {
     int id; 
@@ -40,7 +44,7 @@ typedef struct PCB
     int runtime;
     int priority;
 
-    int state;
+    State state;
 
     int remaining_time;
     int waiting_time;

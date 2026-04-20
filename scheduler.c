@@ -14,7 +14,7 @@ int main(int argc, char * argv[])
 
 
 
-    int msgq_id = msgget(SHKEY, 0666);
+    int msgq_id = msgget(MSGKEY, 0666);
     if (msgq_id == -1)
     {
         perror("msgget failed");
@@ -114,7 +114,7 @@ void runHPF(int msgq_id)
                 pcb->runtime = msg.p.runtime;
                 pcb->priority = msg.p.priority;
 
-                pcb->state = STATE_READY;
+                pcb->state = READY;
                 pcb->remaining_time = msg.p.runtime;
                 pcb->waiting_time = 0;
 
@@ -146,19 +146,19 @@ void runHPF(int msgq_id)
             pid_t result = waitpid(currentProcess->pid, &status, WNOHANG);
 
           if (result == currentProcess->pid && WIFEXITED(status))
-{
-         int ran = now - currentProcess->last_start_time;
-        if (ran < 0) ran = 0;
+        {
+            int ran = now - currentProcess->last_start_time;
+            if (ran < 0) ran = 0;
 
-        currentProcess->executed_time  += ran;
-        currentProcess->remaining_time  = 0;
-        currentProcess->finish_time     = now;
-        currentProcess->TA              = currentProcess->finish_time - currentProcess->arrival_time;
-        currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
-        currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
-        currentProcess->state           = STATE_FINISHED;
+            currentProcess->executed_time  += ran;
+            currentProcess->remaining_time  = 0;
+            currentProcess->finish_time     = now;
+            currentProcess->TA              = currentProcess->finish_time - currentProcess->arrival_time;
+            currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
+            currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
+            currentProcess->state           = STATE_FINISHED;
 
-        fprintf(logFile,
+            fprintf(logFile,
                 "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
                 now,
                 currentProcess->id,
@@ -173,7 +173,7 @@ void runHPF(int msgq_id)
         currentProcess = NULL;
     }
                 // childFinished = 0;
-        }
+}
 
         /* 3) Preemptive HPF: stop current process if a better one exists */
         if (currentProcess != NULL && !isPriorityQueueEmpty(readyQueue))
@@ -292,8 +292,25 @@ void runHPF(int msgq_id)
   
 void runRR(int msgq_id, int quantum)
 {
-    CircularQueue *readyQueue; 
+    CircularQueue *readyQueue = (CircularQueue *)malloc(sizeof(CircularQueue));
+    if (readyQueue == NULL)
+    {
+        perror("malloc failed for readyQueue");
+        return;
+    }
     initQueue(readyQueue);
+
+    FILE *logFile = fopen("scheduler.log", "w");
+    if (logFile == NULL)
+    {
+        perror("fopen scheduler.log failed");
+        free(readyQueue);
+        return;
+    }
+
+    fprintf(logFile, "#At time x process y state arr w total z remain y wait k\n");
+    fflush(logFile);
+
     PCB *currentProcess = NULL;
     int allProcessesSent = 0;
     int lastClk = -1;
@@ -306,6 +323,7 @@ void runRR(int msgq_id, int quantum)
             continue;
         lastClk = now;
 
+        /* 1) Receive all newly arrived processes */
         while (1)
         {
             ProcessMessage msg;
@@ -315,6 +333,8 @@ void runRR(int msgq_id, int quantum)
             {
                 if (errno == ENOMSG)
                     break;
+
+                perror("msgrcv failed");
                 break;
             }
 
@@ -325,117 +345,202 @@ void runRR(int msgq_id, int quantum)
             else
             {
                 PCB *pcb = (PCB *)malloc(sizeof(PCB));
+                if (pcb == NULL)
+                {
+                    perror("malloc failed for PCB");
+                    continue;
+                }
 
-                pcb->id             = msg.p.id;
-                pcb->arrival_time   = msg.p.arrival_time;
-                pcb->runtime        = msg.p.runtime;
-                pcb->priority       = msg.p.priority;
+                pcb->id = msg.p.id;
+                pcb->arrival_time = msg.p.arrival_time;
+                pcb->runtime = msg.p.runtime;
+                pcb->priority = msg.p.priority;
+
+                pcb->state = STATE_READY;
                 pcb->remaining_time = msg.p.runtime;
+                pcb->waiting_time = 0;
 
-                pcb->waiting_time    = 0;
-                pcb->pid             = -1;
-                pcb->start_time      = -1;
-                pcb->finish_time     = -1;
+                pcb->pid = -1;
+
+                pcb->start_time = -1;
+                pcb->finish_time = -1;
                 pcb->last_start_time = -1;
-                pcb->executed_time   = 0;
-                pcb->TA              = 0;
-                pcb->WTA             = 0;
-                pcb->state           = STATE_READY;
-                pcb->next            = NULL;
+
+                pcb->executed_time = 0;
+
+                pcb->TA = 0;
+                pcb->WTA = 0.0f;
+
+                pcb->next = NULL;
+                pcb->prev = NULL;
 
                 enqueue(readyQueue, pcb);
             }
         }
 
-        // if (childFinished && currentProcess != NULL)
+        /* 2) If current process finished, finalize it */
         if (currentProcess != NULL)
         {
             int status;
-            waitpid(currentProcess->pid, &status, WNOHANG);
+            pid_t result = waitpid(currentProcess->pid, &status, WNOHANG);
 
-            int ran = now - currentProcess->last_start_time;
-            if (ran < 0) ran = 0;
+            if (result == currentProcess->pid && WIFEXITED(status))
+            {
+                int ran = now - currentProcess->last_start_time;
+                if (ran < 0)
+                    ran = 0;
 
-            currentProcess->executed_time  += ran;
-            currentProcess->remaining_time  = 0;
-            currentProcess->finish_time     = now;
-            currentProcess->TA              = currentProcess->finish_time - currentProcess->arrival_time;
-            currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
-            currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
-            currentProcess->state           = STATE_FINISHED;
+                currentProcess->executed_time += ran;
+                currentProcess->remaining_time = 0;
+                currentProcess->finish_time = now;
+                currentProcess->TA = currentProcess->finish_time - currentProcess->arrival_time;
+                currentProcess->waiting_time = currentProcess->TA - currentProcess->runtime;
+                currentProcess->WTA = (float) currentProcess->TA / currentProcess->runtime;
+                currentProcess->state = STATE_FINISHED;
 
-            // log finished event here
-            free(currentProcess);
-            currentProcess = NULL;
-            quantumStart   = -1;
-            // childFinished  = 0;
+                fprintf(logFile,
+                        "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
+                        now,
+                        currentProcess->id,
+                        currentProcess->arrival_time,
+                        currentProcess->runtime,
+                        currentProcess->waiting_time,
+                        currentProcess->TA,
+                        currentProcess->WTA);
+                fflush(logFile);
+
+                free(currentProcess);
+                currentProcess = NULL;
+                quantumStart = -1;
+            }
         }
 
-        /* 3) RR preemption: quantum expired → stop current, push to back of queue */
+        /* 3) RR preemption: if quantum expired and process still running */
         if (currentProcess != NULL && (now - quantumStart) >= quantum)
         {
-            int ran = now - currentProcess->last_start_time;
-            if (ran < 0) ran = 0;
+            /* only preempt if it did not already finish */
+            int status;
+            pid_t result = waitpid(currentProcess->pid, &status, WNOHANG);
 
-            currentProcess->executed_time  += ran;
-            currentProcess->remaining_time -= ran;
-            if (currentProcess->remaining_time < 0)
-                currentProcess->remaining_time = 0;
+            if (!(result == currentProcess->pid && WIFEXITED(status)))
+            {
+                int ran = now - currentProcess->last_start_time;
+                if (ran < 0)
+                    ran = 0;
 
-            kill(currentProcess->pid, SIGSTOP);
-            currentProcess->state = STATE_STOPPED;
+                currentProcess->executed_time += ran;
+                currentProcess->remaining_time -= ran;
+                if (currentProcess->remaining_time < 0)
+                    currentProcess->remaining_time = 0;
 
-            // log stopped event here
+                /* If queue is not empty, rotate. If queue is empty, let it continue. */
+                if (!isEmpty(readyQueue))
+                {
+                    kill(currentProcess->pid, SIGSTOP);
+                    currentProcess->state = STATE_STOPPED;
 
-            enqueue(readyQueue, currentProcess);   // goes to BACK of queue
-            currentProcess = NULL;
-            quantumStart   = -1;
+                    int wait = now - currentProcess->arrival_time - currentProcess->executed_time;
+                    if (wait < 0) wait = 0;
+
+                    fprintf(logFile,
+                            "At time %d process %d stopped arr %d total %d remain %d wait %d\n",
+                            now,
+                            currentProcess->id,
+                            currentProcess->arrival_time,
+                            currentProcess->runtime,
+                            currentProcess->remaining_time,
+                            wait);
+                    fflush(logFile);
+
+                    enqueue(readyQueue, currentProcess);
+                    currentProcess = NULL;
+                    quantumStart = -1;
+                }
+                else
+                {
+                    /* nobody else is waiting, continue same process with new quantum */
+                    currentProcess->last_start_time = now;
+                    quantumStart = now;
+                }
+            }
         }
 
-        /* 4) CPU idle → dispatch next from front of queue */
+        /* 4) If CPU is idle, dispatch next process */
         if (currentProcess == NULL && !isEmpty(readyQueue))
         {
-            PCB *next = dequeue(readyQueue);
+            PCB *next = NULL;
+            if (!dequeue(readyQueue, &next) || next == NULL)
+                continue;
 
             if (next->pid == -1)
             {
-                // first time running this process → fork it
                 pid_t pid = fork();
+
+                if (pid < 0)
+                {
+                    perror("fork failed");
+                    free(next);
+                    continue;
+                }
 
                 if (pid == 0)
                 {
                     char remStr[20];
                     sprintf(remStr, "%d", next->remaining_time);
                     execl("./process.out", "process.out", remStr, NULL);
+                    perror("execl failed");
                     exit(1);
                 }
 
-                next->pid            = pid;
-                next->start_time     = now;
+                next->pid = pid;
+                next->start_time = now;
                 next->last_start_time = now;
-                next->state          = STATE_RUNNING;
+                next->state = STARTED;
+                currentProcess = next;
+                quantumStart = now;
 
-                // log started event here
+                int wait = now - next->arrival_time - next->executed_time;
+                if (wait < 0) wait = 0;
+
+                fprintf(logFile,
+                        "At time %d process %d started arr %d total %d remain %d wait %d\n",
+                        now,
+                        next->id,
+                        next->arrival_time,
+                        next->runtime,
+                        next->remaining_time,
+                        wait);
+                fflush(logFile);
             }
             else
             {
-                // process was stopped before → resume it
                 kill(next->pid, SIGCONT);
                 next->last_start_time = now;
-                next->state           = STATE_RUNNING;
+                next->state = RESUMED;
+                currentProcess = next;
+                quantumStart = now;
 
-                // log resumed event here
+                int wait = now - next->arrival_time - next->executed_time;
+                if (wait < 0) wait = 0;
+
+                fprintf(logFile,
+                        "At time %d process %d resumed arr %d total %d remain %d wait %d\n",
+                        now,
+                        next->id,
+                        next->arrival_time,
+                        next->runtime,
+                        next->remaining_time,
+                        wait);
+                fflush(logFile);
             }
-
-            currentProcess = next;
-            quantumStart   = now;    // reset quantum clock
         }
 
-        /* 5) stop condition: all processes sent, nothing running, queue empty */
+        /* 5) Exit when all sent, nothing running, and queue empty */
         if (allProcessesSent && currentProcess == NULL && isEmpty(readyQueue))
             break;
     }
 
+    fclose(logFile);
     free(readyQueue);
 }
     //TODO implement the scheduler :)

@@ -45,23 +45,29 @@ void enqueue(CircularQueue *q, ProcessData *data)
     }
 }
 
-ProcessData *dequeue(CircularQueue *q)
+bool dequeue(CircularQueue *q, ProcessData **retData)
 {
     if (isEmpty(q))
-        return NULL;
+    {
+        *retData = NULL;
+        return false;
+    }
 
     Node *temp = q->rear->next;
-    ProcessData *data = temp->data;
+    *retData = temp->data;
 
     if (q->rear == temp)
+    {
         q->rear = NULL;
+    }
     else
+    {
         q->rear->next = temp->next;
+    }
 
     free(temp);
-    return data;
+    return true;
 }
-
 ProcessData *peekQueue(CircularQueue *q)
 {
     if (isEmpty(q))

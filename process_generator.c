@@ -108,7 +108,8 @@ int main(int argc, char *argv[])
 
             if (p->arrival_time <= now)
             {
-                dequeue(processes);
+                ProcessData *sent = NULL;
+                dequeue(processes, &sent);
 
                 ProcessMessage msg;
                 msg.mtype  = 1;
