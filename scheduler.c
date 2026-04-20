@@ -140,35 +140,39 @@ void runHPF(int msgq_id)
         // if (childFinished && currentProcess != NULL)
         if (currentProcess != NULL)
         {
+            // int status;
+            // waitpid(currentProcess->pid, &status, WNOHANG);
             int status;
-            waitpid(currentProcess->pid, &status, WNOHANG);
+            pid_t result = waitpid(currentProcess->pid, &status, WNOHANG);
 
-            int ran = now - currentProcess->last_start_time;
-            if (ran < 0)
-                ran = 0;
+          if (result == currentProcess->pid && WIFEXITED(status))
+{
+         int ran = now - currentProcess->last_start_time;
+        if (ran < 0) ran = 0;
 
-            currentProcess->executed_time += ran;
-            currentProcess->remaining_time = 0;
-            currentProcess->finish_time = now;
-            currentProcess->TA = currentProcess->finish_time - currentProcess->arrival_time;
-            currentProcess->waiting_time = currentProcess->TA - currentProcess->runtime;
-            currentProcess->WTA = (float) currentProcess->TA / currentProcess->runtime;
-            currentProcess->state = STATE_FINISHED;
+        currentProcess->executed_time  += ran;
+        currentProcess->remaining_time  = 0;
+        currentProcess->finish_time     = now;
+        currentProcess->TA              = currentProcess->finish_time - currentProcess->arrival_time;
+        currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
+        currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
+        currentProcess->state           = STATE_FINISHED;
 
-            fprintf(logFile,
-                    "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
-                    now,
-                    currentProcess->id,
-                    currentProcess->arrival_time,
-                    currentProcess->runtime,
-                    currentProcess->waiting_time,
-                    currentProcess->TA,
-                    currentProcess->WTA);
-            fflush(logFile);
+        fprintf(logFile,
+                "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
+                now,
+                currentProcess->id,
+                currentProcess->arrival_time,
+                currentProcess->runtime,
+                currentProcess->waiting_time,
+                currentProcess->TA,
+                currentProcess->WTA);
+        fflush(logFile);
 
-            free(currentProcess);
-            currentProcess = NULL;
-            // childFinished = 0;
+        free(currentProcess);      // ✅ one free, at the very end
+        currentProcess = NULL;
+    }
+                // childFinished = 0;
         }
 
         /* 3) Preemptive HPF: stop current process if a better one exists */

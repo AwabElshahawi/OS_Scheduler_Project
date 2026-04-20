@@ -111,10 +111,13 @@ int main(int argc, char *argv[])
                 dequeue(processes);
 
                 ProcessMessage msg;
-                msg.mtype = 1;
+                msg.mtype  = 1;
                 msg.isLast = 0;
-
-                if (msgsnd(msgq_id, &msg, sizeof(ProcessMessage) - sizeof(long), !IPC_NOWAIT) == -1)
+                msg.p.id           = p->id;
+                msg.p.arrival_time = p->arrival_time;
+                msg.p.runtime      = p->runtime;
+                msg.p.priority     = p->priority;
+                if (msgsnd(msgq_id, &msg, sizeof(ProcessMessage) - sizeof(long), 0) == -1)
                     perror("msgsnd failed");
 
             }
@@ -129,7 +132,7 @@ int main(int argc, char *argv[])
     endMsg.mtype = 1;
     endMsg.isLast = 1;
 
-    if (msgsnd(msgq_id, &endMsg, sizeof(ProcessMessage) - sizeof(long), !IPC_NOWAIT) == -1)
+    if (msgsnd(msgq_id, &endMsg, sizeof(ProcessMessage) - sizeof(long), 0) == -1)
         perror("msgsnd end failed");
 
     waitpid(scheduler_pid, NULL, 0);
