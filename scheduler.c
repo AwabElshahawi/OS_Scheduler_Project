@@ -4,12 +4,58 @@
 int main(int argc, char * argv[])
 {
     initClk();
+    int algo = atoi(argv[1]);
+    int quantum = atoi(argv[2]);
+
+
+
+    int msgq_id = msgget(MSGKEY, 0666);
+    if (msgq_id == -1)
+    {
+        perror("msgget failed");
+        destroyClk(false);
+        return 1;
+    }
+
+    switch (algo)
+    {
+        case 1:
+            /* Preemptive HPF */
+            runHPF(msgq_id);
+            break;
+
+        case 2:
+            /* RR */
+            runRR(msgq_id, quantum);
+            break;
+
+        case 3:
+            /* FCFS if you have it */
+            runFCFS(msgq_id);
+            break;
+
+        default:
+            printf("Invalid algorithm number\n");
+            break;
+    }
+
+    //TODO implement the scheduler :)
+    //upon termination release the clock resources.
+    destroyClk(false);
+    return 0;
+}
     
 
 
-    void runHPF(int msgq_id)
+  void runHPF(int msgq_id)
 {
     priQueue *readyQueue = createPriQueue();
+    if (readyQueue == NULL)
+    {
+        perror("createPriQueue failed");
+        return;
+    }
+
     PCB *currentProcess = NULL;
     int allProcessesSent = 0;
     int lastClk = -1;
@@ -21,6 +67,7 @@ int main(int argc, char * argv[])
             continue;
         lastClk = now;
 
+        /* 1) Receive all newly arrived processes */
         while (1)
         {
             ProcessMessage msg;
@@ -30,6 +77,8 @@ int main(int argc, char * argv[])
             {
                 if (errno == ENOMSG)
                     break;
+
+                perror("msgrcv failed");
                 break;
             }
 
@@ -40,22 +89,32 @@ int main(int argc, char * argv[])
             else
             {
                 PCB *pcb = (PCB *)malloc(sizeof(PCB));
+                if (pcb == NULL)
+                {
+                    perror("malloc failed for PCB");
+                    continue;
+                }
 
                 pcb->id = msg.p.id;
                 pcb->arrival_time = msg.p.arrival_time;
                 pcb->runtime = msg.p.runtime;
                 pcb->priority = msg.p.priority;
-                pcb->remaining_time = msg.p.runtime;
 
+                pcb->state = STATE_READY;
+                pcb->remaining_time = msg.p.runtime;
                 pcb->waiting_time = 0;
+
                 pcb->pid = -1;
+
                 pcb->start_time = -1;
                 pcb->finish_time = -1;
                 pcb->last_start_time = -1;
+
                 pcb->executed_time = 0;
+
                 pcb->TA = 0;
-                pcb->WTA = 0;
-                pcb->state = STATE_READY;
+                pcb->WTA = 0.0f;
+
                 pcb->next = NULL;
                 pcb->prev = NULL;
 
@@ -63,14 +122,15 @@ int main(int argc, char * argv[])
             }
         }
 
-        /* 2) if current process finished */
+        /* 2) If current process finished, finalize it */
         if (childFinished && currentProcess != NULL)
         {
             int status;
             waitpid(currentProcess->pid, &status, WNOHANG);
 
             int ran = now - currentProcess->last_start_time;
-            if (ran < 0) ran = 0;
+            if (ran < 0)
+                ran = 0;
 
             currentProcess->executed_time += ran;
             currentProcess->remaining_time = 0;
@@ -85,18 +145,21 @@ int main(int argc, char * argv[])
             childFinished = 0;
         }
 
-        /* 3) preemptive HPF check */
+        /* 3) Preemptive HPF: stop current process if a better one exists */
         if (currentProcess != NULL && !isPriorityQueueEmpty(readyQueue))
         {
             PCB *top = peekPriQueue(readyQueue);
 
+            /* smaller priority number = higher priority */
             if (top != NULL && top->priority < currentProcess->priority)
             {
                 int ran = now - currentProcess->last_start_time;
-                if (ran < 0) ran = 0;
+                if (ran < 0)
+                    ran = 0;
 
                 currentProcess->executed_time += ran;
                 currentProcess->remaining_time -= ran;
+
                 if (currentProcess->remaining_time < 0)
                     currentProcess->remaining_time = 0;
 
@@ -108,20 +171,33 @@ int main(int argc, char * argv[])
             }
         }
 
-        /* 4) if CPU idle, dispatch next process */
+        /* 4) If CPU is idle, dispatch highest-priority process */
         if (currentProcess == NULL && !isPriorityQueueEmpty(readyQueue))
         {
             PCB *next = dequeuePriQueue(readyQueue);
+            if (next == NULL)
+                continue;
 
+            /* First run */
             if (next->pid == -1)
             {
                 pid_t pid = fork();
+
+                if (pid < 0)
+                {
+                    perror("fork failed");
+                    free(next);
+                    continue;
+                }
 
                 if (pid == 0)
                 {
                     char remStr[20];
                     sprintf(remStr, "%d", next->remaining_time);
+
                     execl("./process.out", "process.out", remStr, NULL);
+
+                    perror("execl failed");
                     exit(1);
                 }
 
@@ -131,6 +207,7 @@ int main(int argc, char * argv[])
                 next->state = STATE_RUNNING;
                 currentProcess = next;
             }
+            /* Resume stopped process */
             else
             {
                 kill(next->pid, SIGCONT);
@@ -140,7 +217,7 @@ int main(int argc, char * argv[])
             }
         }
 
-        /* 5) stop condition */
+        /* 5) Exit when generator sent all processes and nothing remains */
         if (allProcessesSent && currentProcess == NULL && isPriorityQueueEmpty(readyQueue))
             break;
     }
@@ -297,5 +374,6 @@ void runRR(int msgq_id, int quantum)
     //TODO implement the scheduler :)
     //upon termination release the clock resources.
     
-    destroyClk(true);
-}
+    
+   
+

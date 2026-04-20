@@ -36,8 +36,8 @@ int main(int argc, char *argv[])
 
     printf("\nEnter a scheduling algorithm:\n");
     printf("1 - Preemptive Highest Priority First (HPF)\n");
-    printf("2 - Highest Priority First (HPF)\n");
-    printf("3 - Round Robin (RR)\n");
+    printf("2 - Round Robin (RR)\n");
+    printf("3 - First Come First Served (FCFS)\n");
     printf("Please enter the number corresponding to your choice: ");
 
     int chosensched;
