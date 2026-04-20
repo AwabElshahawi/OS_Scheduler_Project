@@ -1,3 +1,6 @@
+#ifndef HEADERS_H
+#define HEADERS_H
+
 #include <stdio.h>      //if you don't use scanf/printf change this include
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -17,6 +20,11 @@ typedef short bool;
 #define false 0
 
 #define SHKEY 300
+
+#define STATE_STOPPED 0
+#define STATE_FINISHED 1
+#define STATE_READY 2
+#define STATE_RUNNING 3
 typedef struct
 {
     int id;
@@ -102,3 +110,5 @@ void destroyClk(bool terminateAll)
         killpg(getpgrp(), SIGINT);
     }
 }
+
+#endif

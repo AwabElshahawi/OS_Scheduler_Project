@@ -1,16 +1,13 @@
-
 #include "headers.h"
 #include "queue.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/ipc.h>
-#include <sys/msg.h>
-#include <sys/wait.h>
-#include <errno.h>
 int msgq_id = -1;
+
+void clearResources(int signum)
+{
+    if (msgq_id != -1)
+        msgctl(msgq_id, IPC_RMID, NULL);
+}
 
 int main(int argc, char *argv[])
 {
@@ -67,7 +64,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    msgq_id = msgget(MSGKEY, IPC_CREAT | 0666);
+    msgq_id = msgget(SHKEY, IPC_CREAT | 0666);
     if (msgq_id == -1)
     {
         perror("msgget failed");
@@ -111,18 +108,15 @@ int main(int argc, char *argv[])
 
             if (p->arrival_time <= now)
             {
-                ProcessData *sent = NULL;
-                dequeue(processes, &sent);
+                dequeue(processes);
 
                 ProcessMessage msg;
                 msg.mtype = 1;
                 msg.isLast = 0;
-                msg.p = *sent;
 
                 if (msgsnd(msgq_id, &msg, sizeof(ProcessMessage) - sizeof(long), !IPC_NOWAIT) == -1)
                     perror("msgsnd failed");
 
-                free(sent);
             }
             else
             {
@@ -142,10 +136,4 @@ int main(int argc, char *argv[])
 
     destroyClk(true);
     return 0;
-}
-
-void clearResources(int signum)
-{
-    if (msgq_id != -1)
-        msgctl(msgq_id, IPC_RMID, NULL);
 }
