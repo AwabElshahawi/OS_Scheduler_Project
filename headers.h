@@ -20,6 +20,7 @@ typedef short bool;
 #define false 0
 
 #define SHKEY 300
+#define MSGKEY 65
 
 typedef struct
 {
@@ -34,7 +35,8 @@ typedef enum State
     STOPPED,
     FINISHED,
     STARTED,
-    RESUMED
+    RESUMED,
+    READY
 } State;
 
 typedef struct PCB

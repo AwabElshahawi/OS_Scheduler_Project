@@ -156,7 +156,7 @@ void runHPF(int msgq_id)
             currentProcess->TA              = currentProcess->finish_time - currentProcess->arrival_time;
             currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
             currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
-            currentProcess->state           = STATE_FINISHED;
+            currentProcess->state           = FINISHED;
 
             fprintf(logFile,
                 "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
@@ -193,7 +193,7 @@ void runHPF(int msgq_id)
                     currentProcess->remaining_time = 0;
 
                 kill(currentProcess->pid, SIGSTOP);
-                currentProcess->state = STATE_STOPPED;
+                currentProcess->state = STOPPED;
 
                 int wait = now - currentProcess->arrival_time - currentProcess->executed_time;
                 if (wait < 0) wait = 0;
@@ -243,7 +243,7 @@ void runHPF(int msgq_id)
                 next->pid = pid;
                 next->start_time = now;
                 next->last_start_time = now;
-                next->state = STATE_RUNNING;
+                next->state = STARTED;
                 currentProcess = next;
 
                 int wait = now - next->arrival_time - next->executed_time;
@@ -263,7 +263,7 @@ void runHPF(int msgq_id)
             {
                 kill(next->pid, SIGCONT);
                 next->last_start_time = now;
-                next->state = STATE_RUNNING;
+                next->state = RESUMED;
                 currentProcess = next;
 
                 int wait = now - next->arrival_time - next->executed_time;
@@ -356,7 +356,7 @@ void runRR(int msgq_id, int quantum)
                 pcb->runtime = msg.p.runtime;
                 pcb->priority = msg.p.priority;
 
-                pcb->state = STATE_READY;
+                pcb->state = READY;
                 pcb->remaining_time = msg.p.runtime;
                 pcb->waiting_time = 0;
 
@@ -396,7 +396,7 @@ void runRR(int msgq_id, int quantum)
                 currentProcess->TA = currentProcess->finish_time - currentProcess->arrival_time;
                 currentProcess->waiting_time = currentProcess->TA - currentProcess->runtime;
                 currentProcess->WTA = (float) currentProcess->TA / currentProcess->runtime;
-                currentProcess->state = STATE_FINISHED;
+                currentProcess->state = FINISHED;
 
                 fprintf(logFile,
                         "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
@@ -437,7 +437,7 @@ void runRR(int msgq_id, int quantum)
                 if (!isEmpty(readyQueue))
                 {
                     kill(currentProcess->pid, SIGSTOP);
-                    currentProcess->state = STATE_STOPPED;
+                    currentProcess->state = RESUMED;
 
                     int wait = now - currentProcess->arrival_time - currentProcess->executed_time;
                     if (wait < 0) wait = 0;

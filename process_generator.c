@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    msgq_id = msgget(SHKEY, IPC_CREAT | 0666);
+    msgq_id = msgget(MSGKEY, IPC_CREAT | 0666);
     if (msgq_id == -1)
     {
         perror("msgget failed");
