@@ -1,3 +1,15 @@
+
+#include "headers.h"
+#include "queue.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/wait.h>
+#include <errno.h>
 int msgq_id = -1;
 
 int main(int argc, char *argv[])
@@ -13,7 +25,7 @@ int main(int argc, char *argv[])
     CircularQueue *processes = (CircularQueue *)malloc(sizeof(CircularQueue));
     initQueue(processes);
 
-    FILE *f = fopen(argv[1], "r");
+    FILE *f = fopen("test1hpf.txt", "r");
     if (f == NULL)
     {
         printf("Error opening file\n");
