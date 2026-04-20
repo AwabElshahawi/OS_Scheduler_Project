@@ -14,13 +14,8 @@ int main(int argc, char *argv[])
 
     while (remainingtime > 0)
     {
-        int now = getClk();
-
-        if (now != lastClk)
-        {
-            remainingtime--;
-            lastClk = now;
-        }
+        sleep(1);
+        remainingtime--;
     }
 
     // tell scheduler I finished

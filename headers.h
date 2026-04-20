@@ -29,14 +29,15 @@ typedef struct
     int runtime;
     int priority;
 } ProcessData;
-
 typedef enum State
 {
     STOPPED,
     FINISHED,
     STARTED,
     RESUMED,
-    READY
+    READY,
+    RUNNING,
+    
 } State;
 
 typedef struct PCB
