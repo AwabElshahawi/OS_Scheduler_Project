@@ -16,6 +16,13 @@ typedef short bool;
 #define false 0
 
 #define SHKEY 300
+typedef struct
+{
+    int id;
+    int arrival_time;
+    int runtime;
+    int priority;
+} ProcessData;
 
 typedef struct PCB
 {
