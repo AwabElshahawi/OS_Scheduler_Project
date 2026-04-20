@@ -43,6 +43,12 @@ typedef struct PCB
     struct PCB *next;
     struct PCB *prev;
 } PCB;
+typedef struct
+{
+    long mtype;
+    int isLast;
+    ProcessData p;
+} ProcessMessage;
 
 ///==============================
 //don't mess with this variable//
