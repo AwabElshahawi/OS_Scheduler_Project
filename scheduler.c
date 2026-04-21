@@ -137,49 +137,54 @@ int main(int argc, char * argv[])
         if (now == lastClk) { usleep(1000); continue; }
         lastClk = now;
         /* 2) if current process finished, finalize it */
-        if (childFinished && currentProcess != NULL)
+ if (currentProcess != NULL)
+{
+    int ran = now - currentProcess->last_start_time;
+    int updatedRemaining = currentProcess->runtime 
+                         - currentProcess->executed_time 
+                         - ran;
+
+    if (updatedRemaining <= 0)
+    {
+        /* we know it's done — block until it fully exits */
+        int status;
+        waitpid(currentProcess->pid, &status, 0);
+
+        int finishTime = currentProcess->last_start_time 
+                       + currentProcess->remaining_time;
+
+        currentProcess->executed_time  += currentProcess->remaining_time;
+        currentProcess->remaining_time  = 0;
+        currentProcess->finish_time     = finishTime;
+        currentProcess->TA              = finishTime - currentProcess->arrival_time;
+        currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
+        currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
+        currentProcess->state           = FINISHED;
+
+        fprintf(logFile,
+                "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
+                finishTime,
+                currentProcess->id,
+                currentProcess->arrival_time,
+                currentProcess->runtime,
+                currentProcess->waiting_time,
+                currentProcess->TA,
+                currentProcess->WTA);
+        fflush(logFile);
+
+        free(currentProcess);
+        currentProcess = NULL;
+        childFinished  = 0;
+
+        if (!isPriorityQueueEmpty(readyQueue))
         {
-            int status;
-            pid_t result = waitpid(currentProcess->pid, &status, 0);
-
-            if (result == currentProcess->pid && WIFEXITED(status))
-            {
-                int oldRemaining = currentProcess->remaining_time;
-                int finishTime = currentProcess->last_start_time + oldRemaining;
-
-                currentProcess->executed_time += oldRemaining;
-                currentProcess->remaining_time = 0;
-                currentProcess->finish_time = finishTime;
-                currentProcess->TA = currentProcess->finish_time - currentProcess->arrival_time;
-                currentProcess->waiting_time = currentProcess->TA - currentProcess->runtime;
-                currentProcess->WTA = (float) currentProcess->TA / currentProcess->runtime;
-                currentProcess->state = FINISHED;
-
-                fprintf(logFile,
-                        "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
-                        finishTime,
-                        currentProcess->id,
-                        currentProcess->arrival_time,
-                        currentProcess->runtime,
-                        currentProcess->waiting_time,
-                        currentProcess->TA,
-                        currentProcess->WTA);
-                fflush(logFile);
-
-                free(currentProcess);
-                currentProcess = NULL;
-                childFinished = 0;
-
-                if (!isPriorityQueueEmpty(readyQueue))
-                {
-                    switching = 1;
-                    switchEndTime = finishTime + 1;
-                    nextAfterSwitch = dequeuePriQueue(readyQueue);
-                }
-            }
-            continue;
+            switching       = 1;
+            switchEndTime   = finishTime + 1;
+            nextAfterSwitch = dequeuePriQueue(readyQueue);
         }
-
+        continue;
+    }
+}
         /* 3) preemptive HPF: stop current process if a better one exists */
         if (currentProcess != NULL && !isPriorityQueueEmpty(readyQueue))
         {
@@ -294,54 +299,47 @@ int main(int argc, char * argv[])
         }
 
         /* 5) first ever process starts immediately, no switch cost */
-        if (currentProcess == NULL && !switching && !isPriorityQueueEmpty(readyQueue) && !startedOnce)
+      if (currentProcess == NULL && !switching && !isPriorityQueueEmpty(readyQueue))
+{
+    PCB *next = dequeuePriQueue(readyQueue);
+    if (next == NULL) continue;
+
+    if (next->pid == -1)
+    {
+        pid_t pid = fork();
+        if (pid < 0) { perror("fork failed"); free(next); continue; }
+        if (pid == 0)
         {
-            PCB *next = dequeuePriQueue(readyQueue);
-            if (next == NULL)
-                continue;
-
-            startedOnce = 1;
-
-            if (next->pid == -1)
-            {
-                pid_t pid = fork();
-
-                if (pid < 0)
-                {
-                    perror("fork failed");
-                    free(next);
-                    continue;
-                }
-
-                if (pid == 0)
-                {
-                    char remStr[20];
-                    sprintf(remStr, "%d", next->remaining_time);
-                    execl("./process.out", "process.out", remStr, NULL);
-                    perror("execl failed");
-                    exit(1);
-                }
-
-                next->pid = pid;
-                next->start_time = now;
-                next->last_start_time = now;
-                next->state = RUNNING;
-                currentProcess = next;
-
-                int wait = now - next->arrival_time - next->executed_time;
-                if (wait < 0) wait = 0;
-
-                fprintf(logFile,
-                        "At time %d process %d started arr %d total %d remain %d wait %d\n",
-                        now,
-                        next->id,
-                        next->arrival_time,
-                        next->runtime,
-                        next->remaining_time,
-                        wait);
-                fflush(logFile);
-            }
+            char remStr[20];
+            sprintf(remStr, "%d", next->remaining_time);
+            execl("./process.out", "process.out", remStr, NULL);
+            exit(1);
         }
+        next->pid            = pid;
+        next->start_time     = now;
+        next->last_start_time = now;
+        next->state          = RUNNING;
+        currentProcess       = next;
+    }
+    else
+    {
+        kill(next->pid, SIGCONT);
+        next->last_start_time = now;
+        next->state           = RUNNING;
+        currentProcess        = next;
+    }
+
+    int wait = now - next->arrival_time - next->executed_time;
+    if (wait < 0) wait = 0;
+
+    fprintf(logFile,
+            next->start_time == now
+                ? "At time %d process %d started arr %d total %d remain %d wait %d\n"
+                : "At time %d process %d resumed arr %d total %d remain %d wait %d\n",
+            now, next->id, next->arrival_time,
+            next->runtime, next->remaining_time, wait);
+    fflush(logFile);
+}
 
         /* 6) exit when generator sent all processes and nothing remains */
         if (allProcessesSent &&
@@ -439,12 +437,12 @@ void runRR(int msgq_id, int quantum)
         /* 2) If current process finished naturally, finalize it */
         if (currentProcess != NULL)
 {
-    /* Update remaining_time every tick based on elapsed time */
-    int ran = now - currentProcess->last_start_time;
-    int updatedRemaining = currentProcess->runtime - currentProcess->executed_time - ran;
+        /* Update remaining_time every tick based on elapsed time */
+        int ran = now - currentProcess->last_start_time;
+        int updatedRemaining = currentProcess->runtime - currentProcess->executed_time - ran;
 
-    if (updatedRemaining <= 0)
-    {
+        if (updatedRemaining <= 0)
+        {
         /* Process must be finishing — block until it exits */
         int status;
         waitpid(currentProcess->pid, &status, 0);
