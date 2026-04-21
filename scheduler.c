@@ -2,12 +2,23 @@
 #include "priQueue.h"
 #include "queue.h"
 #include "PCBqueue.h"
+#include <math.h>
 volatile sig_atomic_t childFinished = 0;
 
 void onChildFinished(int signum)
 {
     childFinished = 1;
 }
+float avgWTA;
+float avgWaiting;
+float stdWTA;
+float cpuUtilization;
+float totalWTA = 0.0;
+float totalWaiting = 0.0;
+float totalWTA2 = 0.0;
+int totalRuntimeAll = 0;
+int totalProcesses = 0;
+int lastFinishTime = 0;
 
 void runHPF(int msgq_id);
 void runRR(int msgq_id, int quantum);
@@ -15,6 +26,16 @@ void runRR(int msgq_id, int quantum);
 
 int main(int argc, char * argv[])
 {
+    avgWTA=0.0;
+    avgWaiting=0.0;
+    stdWTA=0.0;
+    cpuUtilization=0.0;
+    totalWTA = 0.0;
+    totalWaiting = 0.0;
+    totalWTA2 = 0.0;
+    totalRuntimeAll = 0;
+    totalProcesses = 0;
+    lastFinishTime = 0;
     initClk();
     int algo = atoi(argv[1]);
     int quantum = atoi(argv[2]);
@@ -49,6 +70,32 @@ int main(int argc, char * argv[])
         default:
             printf("Invalid algorithm number\n");
             break;
+    }
+
+    if (totalProcesses > 0)
+    {
+        avgWTA = totalWTA / totalProcesses;
+        avgWaiting = totalWaiting / totalProcesses;
+        stdWTA = sqrt((totalWTA2 / totalProcesses) - (avgWTA * avgWTA));
+    }
+
+    if (lastFinishTime > 0)
+    {
+        cpuUtilization = ((float) totalRuntimeAll / lastFinishTime) * 100.0;
+    }
+     
+    FILE *perfFile = fopen("scheduler.perf", "w");
+    if (perfFile == NULL)
+    {
+        perror("fopen scheduler.perf failed");
+    }
+    else
+    {
+        fprintf(perfFile, "CPU utilization = %.2f%%\n", cpuUtilization);
+        fprintf(perfFile, "Avg WTA = %.2f\n", avgWTA);
+        fprintf(perfFile, "Avg Waiting = %.2f\n", avgWaiting);
+        fprintf(perfFile, "Std WTA = %.2f\n", stdWTA);
+        fclose(perfFile);
     }
 
     //TODO implement the scheduler :)
@@ -102,6 +149,8 @@ int main(int argc, char * argv[])
             }
             else
             {
+                totalRuntimeAll += msg.p.runtime;
+                totalProcesses++;
                 PCB *pcb = (PCB *)malloc(sizeof(PCB));
                 if (pcb == NULL)
                 {
@@ -138,53 +187,59 @@ int main(int argc, char * argv[])
         if (now == lastClk) { usleep(1000); continue; }
         lastClk = now;
         /* 2) if current process finished, finalize it */
- if (currentProcess != NULL)
-{
-    int ran = now - currentProcess->last_start_time;
-    int updatedRemaining = currentProcess->runtime 
-                         - currentProcess->executed_time 
-                         - ran;
-
-    if (updatedRemaining <= 0)
+    if (currentProcess != NULL)
     {
-        /* we know it's done — block until it fully exits */
-        int status;
-        waitpid(currentProcess->pid, &status, 0);
+        int ran = now - currentProcess->last_start_time;
+        int updatedRemaining = currentProcess->runtime 
+                            - currentProcess->executed_time 
+                            - ran;
 
-        int finishTime = currentProcess->last_start_time 
-                       + currentProcess->remaining_time;
-
-        currentProcess->executed_time  += currentProcess->remaining_time;
-        currentProcess->remaining_time  = 0;
-        currentProcess->finish_time     = finishTime;
-        currentProcess->TA              = finishTime - currentProcess->arrival_time;
-        currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
-        currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
-        currentProcess->state           = FINISHED;
-
-        fprintf(logFile,
-                "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
-                finishTime,
-                currentProcess->id,
-                currentProcess->arrival_time,
-                currentProcess->runtime,
-                currentProcess->waiting_time,
-                currentProcess->TA,
-                currentProcess->WTA);
-        fflush(logFile);
-
-        free(currentProcess);
-        currentProcess = NULL;
-        childFinished  = 0;
-
-        if (!isPriorityQueueEmpty(readyQueue))
+        if (updatedRemaining <= 0)
         {
-            switching       = 1;
-            switchEndTime   = finishTime + 1;
-            nextAfterSwitch = dequeuePriQueue(readyQueue);
+            /* we know it's done — block until it fully exits */
+            int status;
+            waitpid(currentProcess->pid, &status, 0);
+
+            int finishTime = currentProcess->last_start_time 
+                        + currentProcess->remaining_time;
+
+            currentProcess->executed_time  += currentProcess->remaining_time;
+            currentProcess->remaining_time  = 0;
+            currentProcess->finish_time     = finishTime;
+            currentProcess->TA              = finishTime - currentProcess->arrival_time;
+            currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
+            currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
+            currentProcess->state           = FINISHED;
+
+            //perf
+            totalWTA += currentProcess->WTA;
+            totalWaiting += currentProcess->waiting_time;
+            totalWTA2 += currentProcess->WTA * currentProcess->WTA;
+            lastFinishTime = currentProcess->finish_time;
+
+            fprintf(logFile,
+                    "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
+                    finishTime,
+                    currentProcess->id,
+                    currentProcess->arrival_time,
+                    currentProcess->runtime,
+                    currentProcess->waiting_time,
+                    currentProcess->TA,
+                    currentProcess->WTA);
+            fflush(logFile);
+
+            free(currentProcess);
+            currentProcess = NULL;
+            childFinished  = 0;
+
+            if (!isPriorityQueueEmpty(readyQueue))
+            {
+                switching       = 1;
+                switchEndTime   = finishTime + 1;
+                nextAfterSwitch = dequeuePriQueue(readyQueue);
+            }
+            continue;
         }
-        continue;
-    }
 }
         /* 3) preemptive HPF: stop current process if a better one exists */
         if (currentProcess != NULL && !isPriorityQueueEmpty(readyQueue))
@@ -394,7 +449,8 @@ void runRR(int msgq_id, int quantum)
                 allProcessesSent = 1;
             }
             else
-            {
+            {    totalRuntimeAll += msg.p.runtime;
+                totalProcesses++;
                 PCB *pcb = (PCB *)malloc(sizeof(PCB));
                 if (pcb == NULL) { perror("malloc failed for PCB"); continue; }
 
@@ -447,6 +503,11 @@ void runRR(int msgq_id, int quantum)
                 currentProcess->waiting_time    = currentProcess->TA - currentProcess->runtime;
                 currentProcess->WTA             = (float)currentProcess->TA / currentProcess->runtime;
                 currentProcess->state           = FINISHED;
+//perf
+                totalWTA += currentProcess->WTA;
+                totalWaiting += currentProcess->waiting_time;
+                totalWTA2 += currentProcess->WTA * currentProcess->WTA;
+                lastFinishTime = currentProcess->finish_time;
 
                 fprintf(logFile,
                         "At time %d process %d finished arr %d total %d remain 0 wait %d TA %d WTA %.2f\n",
