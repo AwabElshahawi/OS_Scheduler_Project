@@ -5,7 +5,7 @@
 
 typedef struct Node
 {
-    ProcessData *data;
+    PCB *data;
     struct Node *next;
 } Node;
 
@@ -24,7 +24,7 @@ bool isEmpty(CircularQueue *q)
     return q->rear == NULL;
 }
 
-void enqueue(CircularQueue *q, ProcessData *data)
+void enqueue(CircularQueue *q, PCB *data)
 {
     Node *newNode = (Node *)malloc(sizeof(Node));
     if (!newNode)
@@ -45,7 +45,7 @@ void enqueue(CircularQueue *q, ProcessData *data)
     }
 }
 
-bool dequeue(CircularQueue *q, ProcessData **retData)
+bool dequeue(CircularQueue *q, PCB **retData)
 {
     if (isEmpty(q))
     {
@@ -68,7 +68,7 @@ bool dequeue(CircularQueue *q, ProcessData **retData)
     free(temp);
     return true;
 }
-ProcessData *peekQueue(CircularQueue *q)
+PCB *peekQueue(CircularQueue *q)
 {
     if (isEmpty(q))
         return NULL;
