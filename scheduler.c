@@ -356,19 +356,9 @@ int main(int argc, char * argv[])
 }
 void runRR(int msgq_id, int quantum)
 {
-<<<<<<< HEAD
     CircularQueue *readyQueue = (CircularQueue *)malloc(sizeof(CircularQueue));
     if (readyQueue == NULL) { perror("malloc failed for readyQueue"); return; }
     initQueue(readyQueue);
-=======
-    PCBCircularQueue *readyQueue = (PCBCircularQueue *)malloc(sizeof(PCBCircularQueue));
-    if (readyQueue == NULL)
-    {
-        perror("malloc failed for readyQueue");
-        return;
-    }
-    initPCBQueue(readyQueue);
->>>>>>> bfff4fa6bf2bcc3032089bea6ef3beab6fc051e0
 
     FILE *logFile = fopen("scheduler.log", "w");
     if (logFile == NULL) { perror("fopen scheduler.log failed"); free(readyQueue); return; }
@@ -484,7 +474,6 @@ void runRR(int msgq_id, int quantum)
                 }
                 continue;
             }
-<<<<<<< HEAD
         }
 
         /* 3) quantum expired and process still running */
@@ -499,9 +488,6 @@ void runRR(int msgq_id, int quantum)
                 currentProcess->remaining_time = 0;
 
             if (!isEmpty(readyQueue))
-=======
-            else if (!isPCBQueueEmpty(readyQueue))
->>>>>>> bfff4fa6bf2bcc3032089bea6ef3beab6fc051e0
             {
                 /* others waiting — stop current and start switch */
                 kill(currentProcess->pid, SIGSTOP);
@@ -520,7 +506,6 @@ void runRR(int msgq_id, int quantum)
                         wait);
                 fflush(logFile);
 
-<<<<<<< HEAD
                 enqueue(readyQueue, currentProcess);
 
                 PCB *next = NULL;
@@ -532,11 +517,6 @@ void runRR(int msgq_id, int quantum)
                 switchEndTime   = now + 1;
                 nextAfterSwitch = next;
                 continue;
-=======
-                enqueuePCB(readyQueue, currentProcess);
-                currentProcess = NULL;
-                quantumStart   = -1;
->>>>>>> bfff4fa6bf2bcc3032089bea6ef3beab6fc051e0
             }
             else
             {
@@ -546,21 +526,12 @@ void runRR(int msgq_id, int quantum)
             }
         }
 
-<<<<<<< HEAD
         /* 4) context switch finished — dispatch next process */
         if (switching && now >= switchEndTime && nextAfterSwitch != NULL)
         {
             PCB *next       = nextAfterSwitch;
             nextAfterSwitch = NULL;
             switching       = 0;
-=======
-        /* 4) If CPU is idle, dispatch next process */
-        if (currentProcess == NULL && !isPCBQueueEmpty(readyQueue))
-        {
-            PCB *next = NULL;
-            if (!dequeuePCB(readyQueue, &next) || next == NULL)
-                continue;
->>>>>>> bfff4fa6bf2bcc3032089bea6ef3beab6fc051e0
 
             if (next->pid == -1)
             {
@@ -609,7 +580,6 @@ void runRR(int msgq_id, int quantum)
             }
         }
 
-<<<<<<< HEAD
         /* 5) CPU idle with no pending switch — dispatch immediately (no cost) */
         if (currentProcess == NULL && !switching && !isEmpty(readyQueue))
         {
@@ -669,10 +639,6 @@ void runRR(int msgq_id, int quantum)
             nextAfterSwitch == NULL &&
             !switching &&
             isEmpty(readyQueue))
-=======
-        /* 5) Exit when all processes sent, nothing running, and queue empty */
-        if (allProcessesSent && currentProcess == NULL && isPCBQueueEmpty(readyQueue))
->>>>>>> bfff4fa6bf2bcc3032089bea6ef3beab6fc051e0
             break;
     }
 
