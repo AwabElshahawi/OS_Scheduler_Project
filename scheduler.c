@@ -1,6 +1,7 @@
 #include "headers.h"
 #include "priQueue.h"
 #include "queue.h"
+#include "PCBqueue.h"
 volatile sig_atomic_t childFinished = 0;
 
 void onChildFinished(int signum)
@@ -355,13 +356,13 @@ int main(int argc, char * argv[])
 }
 void runRR(int msgq_id, int quantum)
 {
-    CircularQueue *readyQueue = (CircularQueue *)malloc(sizeof(CircularQueue));
+    PCBCircularQueue *readyQueue = (PCBCircularQueue *)malloc(sizeof(PCBCircularQueue));
     if (readyQueue == NULL)
     {
         perror("malloc failed for readyQueue");
         return;
     }
-    initQueue(readyQueue);
+    initPCBQueue(readyQueue);
 
     FILE *logFile = fopen("scheduler.log", "w");
     if (logFile == NULL)
@@ -430,7 +431,7 @@ void runRR(int msgq_id, int quantum)
                 pcb->next           = NULL;
                 pcb->prev           = NULL;
 
-                enqueue(readyQueue, pcb);
+                enqueuePCB(readyQueue, pcb);
             }
         }
 
@@ -541,7 +542,7 @@ void runRR(int msgq_id, int quantum)
                 currentProcess = NULL;
                 quantumStart   = -1;
             }
-            else if (!isEmpty(readyQueue))
+            else if (!isPCBQueueEmpty(readyQueue))
             {
                 /* Still has work to do and others are waiting — preempt */
                 kill(currentProcess->pid, SIGSTOP);
@@ -560,7 +561,7 @@ void runRR(int msgq_id, int quantum)
                         wait);
                 fflush(logFile);
 
-                enqueue(readyQueue, currentProcess);
+                enqueuePCB(readyQueue, currentProcess);
                 currentProcess = NULL;
                 quantumStart   = -1;
             }
@@ -573,10 +574,10 @@ void runRR(int msgq_id, int quantum)
         }
 
         /* 4) If CPU is idle, dispatch next process */
-        if (currentProcess == NULL && !isEmpty(readyQueue))
+        if (currentProcess == NULL && !isPCBQueueEmpty(readyQueue))
         {
             PCB *next = NULL;
-            if (!dequeue(readyQueue, &next) || next == NULL)
+            if (!dequeuePCB(readyQueue, &next) || next == NULL)
                 continue;
 
             if (next->pid == -1)
@@ -645,7 +646,7 @@ void runRR(int msgq_id, int quantum)
         }
 
         /* 5) Exit when all processes sent, nothing running, and queue empty */
-        if (allProcessesSent && currentProcess == NULL && isEmpty(readyQueue))
+        if (allProcessesSent && currentProcess == NULL && isPCBQueueEmpty(readyQueue))
             break;
     }
 
