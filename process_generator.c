@@ -21,7 +21,7 @@ int main(int argc, char *argv[])
     CircularQueue *processes = (CircularQueue *)malloc(sizeof(CircularQueue));
     initQueue(processes);
 
-    FILE *f = fopen("test1hpf.txt", "r");
+    FILE *f = fopen(argv[1], "r");
     if (f == NULL)
     {
         printf("Error opening file\n");
