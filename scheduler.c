@@ -356,9 +356,9 @@ int main(int argc, char * argv[])
 }
 void runRR(int msgq_id, int quantum)
 {
-    CircularQueue *readyQueue = (CircularQueue *)malloc(sizeof(CircularQueue));
+    PCBCircularQueue *readyQueue = (PCBCircularQueue *)malloc(sizeof(PCBCircularQueue));
     if (readyQueue == NULL) { perror("malloc failed for readyQueue"); return; }
-    initQueue(readyQueue);
+    initPCBQueue(readyQueue);
 
     FILE *logFile = fopen("scheduler.log", "w");
     if (logFile == NULL) { perror("fopen scheduler.log failed"); free(readyQueue); return; }
@@ -464,10 +464,10 @@ void runRR(int msgq_id, int quantum)
                 quantumStart   = -1;
 
                 /* start switch overhead if someone is waiting */
-                if (!isEmpty(readyQueue))
+                if (!isPCBQueueEmpty(readyQueue))
                 {
                     PCB *next = NULL;
-                    dequeue(readyQueue, &next);
+                    dequeuePCB(readyQueue, &next);
                     switching       = 1;
                     switchEndTime   = finishTime + 1;
                     nextAfterSwitch = next;
@@ -487,7 +487,7 @@ void runRR(int msgq_id, int quantum)
             if (currentProcess->remaining_time < 0)
                 currentProcess->remaining_time = 0;
 
-            if (!isEmpty(readyQueue))
+            if (!isPCBQueueEmpty(readyQueue))
             {
                 /* others waiting — stop current and start switch */
                 kill(currentProcess->pid, SIGSTOP);
@@ -506,10 +506,10 @@ void runRR(int msgq_id, int quantum)
                         wait);
                 fflush(logFile);
 
-                enqueue(readyQueue, currentProcess);
+                enqueuePCB(readyQueue, currentProcess);
 
                 PCB *next = NULL;
-                dequeue(readyQueue, &next);
+                dequeuePCB(readyQueue, &next);
 
                 currentProcess  = NULL;
                 quantumStart    = -1;
@@ -581,10 +581,10 @@ void runRR(int msgq_id, int quantum)
         }
 
         /* 5) CPU idle with no pending switch — dispatch immediately (no cost) */
-        if (currentProcess == NULL && !switching && !isEmpty(readyQueue))
+        if (currentProcess == NULL && !switching && !isPCBQueueEmpty(readyQueue))
         {
             PCB *next = NULL;
-            if (!dequeue(readyQueue, &next) || next == NULL) continue;
+            if (!dequeuePCB(readyQueue, &next) || next == NULL) continue;
 
             if (next->pid == -1)
             {
@@ -638,7 +638,7 @@ void runRR(int msgq_id, int quantum)
             currentProcess  == NULL &&
             nextAfterSwitch == NULL &&
             !switching &&
-            isEmpty(readyQueue))
+            isPCBQueueEmpty(readyQueue))
             break;
     }
 
