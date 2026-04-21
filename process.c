@@ -1,7 +1,6 @@
 #include "headers.h"
 
 int remainingtime;
-int lastClk;
 volatile sig_atomic_t resumedFlag = 0;
 
 void handleCont(int signum)
@@ -15,30 +14,35 @@ int main(int argc, char *argv[])
     signal(SIGCONT, handleCont);
 
     remainingtime = atoi(argv[1]);
-    lastClk = getClk();
+
+    int lastClk = getClk();
 
     while (remainingtime > 0)
     {
+        /* If we just resumed from SIGSTOP, re-sync the clock
+           without counting the tick we were stopped during */
         if (resumedFlag)
         {
-            lastClk = getClk();
             resumedFlag = 0;
+            lastClk = getClk();
         }
 
-        while (getClk() == lastClk)
+        /* Busy-wait until the clock advances by exactly one tick */
+        int currentClk;
+        while ((currentClk = getClk()) == lastClk)
         {
             if (resumedFlag)
             {
-                lastClk = getClk();
                 resumedFlag = 0;
+                lastClk = getClk();
             }
         }
 
-        lastClk = getClk();
+        /* One full tick has passed — count it */
+        lastClk = currentClk;
         remainingtime--;
     }
 
-    kill(getppid(), SIGUSR1);
     destroyClk(false);
     return 0;
 }
