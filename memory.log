@@ -1,0 +1,6 @@
+PageFault upon VA 0000000000 from process 1
+Free Physical page 1 allocated
+At time 0 disk address 0 for process 1 is loaded into memory page 1.
+PageFault upon VA 0000000000 from process 2
+Free Physical page 3 allocated
+At time 3 disk address 10 for process 2 is loaded into memory page 3.

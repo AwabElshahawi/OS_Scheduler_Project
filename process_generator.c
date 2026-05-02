@@ -29,18 +29,25 @@ int main(int argc, char *argv[])
     }
 
     int id, arrival, runtime, priority, base, limit;
-    fscanf(f, "%*[^\n]\n");
+    char line[200];
 
-    while (fscanf(f, "%d %d %d %d %d %d", &id, &arrival, &runtime, &priority, &base, &limit) == 6)
+    while (fgets(line, sizeof(line), f))
     {
-        ProcessData *p = (ProcessData *)malloc(sizeof(ProcessData));
-        p->id = id;
-        p->arrival_time = arrival;
-        p->runtime = runtime;
-        p->priority = priority;
-        p->base = base;
-        p->limit = limit;
-        enqueue(processes, p);
+        if (line[0] == '#' || line[0] == '\n')
+            continue;
+
+        if (sscanf(line, "%d %d %d %d %d %d",
+                &id, &arrival, &runtime, &priority, &base, &limit) == 6)
+        {
+            ProcessData *p = malloc(sizeof(ProcessData));
+            p->id = id;
+            p->arrival_time = arrival;
+            p->runtime = runtime;
+            p->priority = priority;
+            p->base = base;
+            p->limit = limit;
+            enqueue(processes, p);
+        }
     }
     fclose(f);
 

@@ -39,9 +39,16 @@ typedef enum State
     RESUMED,
     READY,
     RUNNING,
+    BLOCKED
     
 } State;
 
+typedef struct PageTableEntry {
+    int frame_number;
+    int present;
+    int referenced;
+    int modified;
+} PageTableEntry;
 
 typedef struct MemoryRequest
 {
@@ -80,6 +87,7 @@ typedef struct PCB
     MemoryRequest *requests;
     int request_count;
     int next_request_index;
+    PageTableEntry *page_table;
 
     struct PCB *next;
     struct PCB *prev;
@@ -93,10 +101,10 @@ typedef struct
 
 ///==============================
 //don't mess with this variable//
-int * shmaddr;                 //
+static int * shmaddr;                 //
 //===============================
 
-int getClk()
+static int getClk()
 {
     return *shmaddr;
 }
@@ -105,7 +113,7 @@ int getClk()
  * All process call this function at the beginning to establish communication between them and the clock module.
  * Again, remember that the clock is only emulation!
 */
-void initClk()
+static void initClk()
 {
     int shmid = shmget(SHKEY, 4, 0444);
     while ((int)shmid == -1)
@@ -127,7 +135,7 @@ void initClk()
  *                      It terminates the whole system and releases resources.
 */
 
-void destroyClk(bool terminateAll)
+static void destroyClk(bool terminateAll)
 {
     shmdt(shmaddr);
     if (terminateAll)

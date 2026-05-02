@@ -1,0 +1,3 @@
+#time address r/w
+1 0 r
+2 16 r
