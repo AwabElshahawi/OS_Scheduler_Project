@@ -3,6 +3,8 @@
 #include "queue.h"
 #include "PCBqueue.h"
 #include <math.h>
+#include "MMU.h"
+#include "MMU.c"
 volatile sig_atomic_t childFinished = 0;
 
 void onChildFinished(int signum)
@@ -21,7 +23,7 @@ int totalProcesses = 0;
 int lastFinishTime = 0;
 
 void runHPF(int msgq_id);
-void runRR(int msgq_id, int quantum);
+void runRR(int msgq_id, int quantum, int nru_reset_quantums);
 // void runFCFS(int msgq_id); //TODO
 
 int main(int argc, char * argv[])
@@ -39,6 +41,7 @@ int main(int argc, char * argv[])
     initClk();
     int algo = atoi(argv[1]);
     int quantum = atoi(argv[2]);
+    int nru_reset_quantums = atoi(argv[3]);
     signal(SIGUSR1, onChildFinished);   
 
 
@@ -59,7 +62,7 @@ int main(int argc, char * argv[])
 
         case 2:
             /* RR */
-            runRR(msgq_id, quantum);
+            runRR(msgq_id, quantum, nru_reset_quantums);
             break;
 
         // case 3:
@@ -114,6 +117,7 @@ int main(int argc, char * argv[])
     }
 
     FILE *logFile = fopen("scheduler.log", "w");
+    FILE *memoryLog = fopen("memory.log", "w");
     if (logFile == NULL)
     {
         perror("fopen scheduler.log failed");
@@ -407,16 +411,21 @@ int main(int argc, char * argv[])
     }
 
     fclose(logFile);
+    fclose(memoryLog);
     free(readyQueue);
 }
-void runRR(int msgq_id, int quantum)
+void runRR(int msgq_id, int quantum, int nru_reset_quantums)
 {
     PCBCircularQueue *readyQueue = (PCBCircularQueue *)malloc(sizeof(PCBCircularQueue));
     if (readyQueue == NULL) { perror("malloc failed for readyQueue"); return; }
     initPCBQueue(readyQueue);
 
     FILE *logFile = fopen("scheduler.log", "w");
-    if (logFile == NULL) { perror("fopen scheduler.log failed"); free(readyQueue); return; }
+    FILE *memoryLog = fopen("memory.log", "w");
+    if (logFile == NULL || memoryLog == NULL) { perror("fopen log failed"); if(logFile) fclose(logFile); if(memoryLog) fclose(memoryLog); free(readyQueue); return; }
+
+    MMU mmu;
+    mmu_init(&mmu, nru_reset_quantums, memoryLog);
 
     fprintf(logFile, "#At time x process y state arr w total z remain y wait k\n");
     fflush(logFile);
@@ -468,6 +477,13 @@ void runRR(int msgq_id, int quantum)
                 pcb->executed_time   = 0;
                 pcb->TA              = 0;
                 pcb->WTA             = 0.0f;
+
+                int pt_frame = mmu_allocate_frame(&mmu);
+                if (pt_frame == -1) pt_frame = mmu_select_nru_victim(&mmu);
+                if (pt_frame != -1) {
+                    mmu.frames[pt_frame].type = FRAME_PAGE_TABLE;
+                    mmu.frames[pt_frame].owner_pid = pcb->id;
+                }
                 pcb->next            = NULL;
                 pcb->prev            = NULL;
 
@@ -575,6 +591,7 @@ void runRR(int msgq_id, int quantum)
                 currentProcess  = NULL;
                 quantumStart    = -1;
                 switching       = 1;
+                mmu_account_quantum(&mmu);
                 switchEndTime   = now + 1;
                 nextAfterSwitch = next;
                 continue;
@@ -704,6 +721,7 @@ void runRR(int msgq_id, int quantum)
     }
 
     fclose(logFile);
+    fclose(memoryLog);
     free(readyQueue);
 }
     //TODO implement the scheduler :)

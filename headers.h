@@ -28,6 +28,8 @@ typedef struct
     int arrival_time;
     int runtime;
     int priority;
+    int base;
+    int limit;
 } ProcessData;
 typedef enum State
 {
