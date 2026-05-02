@@ -28,16 +28,18 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    int id, arrival, runtime, priority;
+    int id, arrival, runtime, priority, base, limit;
     fscanf(f, "%*[^\n]\n");
 
-    while (fscanf(f, "%d %d %d %d", &id, &arrival, &runtime, &priority) == 4)
+    while (fscanf(f, "%d %d %d %d %d %d", &id, &arrival, &runtime, &priority, &base, &limit) == 6)
     {
         ProcessData *p = (ProcessData *)malloc(sizeof(ProcessData));
         p->id = id;
         p->arrival_time = arrival;
         p->runtime = runtime;
         p->priority = priority;
+        p->base = base;
+        p->limit = limit;
         enqueue(processes, p);
     }
     fclose(f);
@@ -60,6 +62,18 @@ int main(int argc, char *argv[])
         {
             printf("Quantum must be greater than zero!\n");
             scanf("%d", &quantum);
+        }
+    }
+
+    int nruK = 1;
+    if (chosensched == 2)
+    {
+        printf("Enter NRU R-bit reset timeout K (in quantums): ");
+        scanf("%d", &nruK);
+        while (nruK <= 0)
+        {
+            printf("K must be greater than zero!\n");
+            scanf("%d", &nruK);
         }
     }
 
@@ -86,7 +100,10 @@ sleep(1);
         sprintf(algoStr, "%d", chosensched);
         sprintf(quantumStr, "%d", quantum);
 
-        execl("./scheduler.out", "scheduler.out", algoStr, quantumStr, NULL);
+        char nruStr[10];
+        sprintf(nruStr, "%d", nruK);
+
+        execl("./scheduler.out", "scheduler.out", algoStr, quantumStr, nruStr, NULL);
         perror("execl scheduler failed");
         exit(1);
     }
@@ -112,6 +129,8 @@ sleep(1);
                 msg.p.arrival_time = p->arrival_time;
                 msg.p.runtime      = p->runtime;
                 msg.p.priority     = p->priority;
+                msg.p.base         = p->base;
+                msg.p.limit        = p->limit;
                 if (msgsnd(msgq_id, &msg, sizeof(ProcessMessage) - sizeof(long), 0) == -1)
                 {
                     perror("msgsnd failed");
