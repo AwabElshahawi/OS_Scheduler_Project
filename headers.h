@@ -42,6 +42,14 @@ typedef enum State
     
 } State;
 
+
+typedef struct MemoryRequest
+{
+    int time;
+    int address;
+    char op;
+} MemoryRequest;
+
 typedef struct PCB
 {
     int id; 
@@ -64,6 +72,14 @@ typedef struct PCB
 
     int TA;
     float WTA;
+
+    int base;
+    int limit;
+    int page_table_frame;
+
+    MemoryRequest *requests;
+    int request_count;
+    int next_request_index;
 
     struct PCB *next;
     struct PCB *prev;

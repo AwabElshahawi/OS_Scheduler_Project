@@ -467,6 +467,8 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                 pcb->arrival_time    = msg.p.arrival_time;
                 pcb->runtime         = msg.p.runtime;
                 pcb->priority        = msg.p.priority;
+                pcb->base            = msg.p.base;
+                pcb->limit           = msg.p.limit;
                 pcb->state           = READY;
                 pcb->remaining_time  = msg.p.runtime;
                 pcb->waiting_time    = 0;
@@ -484,6 +486,10 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                     mmu.frames[pt_frame].type = FRAME_PAGE_TABLE;
                     mmu.frames[pt_frame].owner_pid = pcb->id;
                 }
+                pcb->page_table_frame = pt_frame;
+                pcb->requests = NULL;
+                pcb->request_count = 0;
+                pcb->next_request_index = 0;
                 pcb->next            = NULL;
                 pcb->prev            = NULL;
 
