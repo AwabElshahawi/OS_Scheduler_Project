@@ -11,6 +11,7 @@
 typedef enum FrameType {
     FRAME_FREE = 0,
     FRAME_PAGE_TABLE,
+    FRAME_RESERVED,
     FRAME_DATA
 } FrameType;
 
@@ -43,6 +44,8 @@ int mmu_handle_page_fault(MMU *mmu, PCB *pcb, int virtual_address, char op, int 
 void mmu_free_process(MMU *mmu, PCB *pcb);
 void mmu_invalidate_owner_page(MMU *mmu, int victim_frame, PCB **all_pcbs, int pcb_count);
 void mmu_free_frame(MMU *mmu, int frame);
+int mmu_reserve_page_frame(MMU *mmu, PCB *pcb, int virtual_page, char op, int *disk_ticks);
+int mmu_complete_page_load(MMU *mmu, PCB *pcb, int virtual_page, char op, int frame, int now);
 int mmu_load_page(MMU *mmu, PCB *pcb, int virtual_page, char op, int now, int *disk_ticks);
 int mmu_access_memory(MMU *mmu, PCB *pcb, int virtual_address, char op, int now);
 

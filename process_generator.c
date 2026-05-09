@@ -16,8 +16,8 @@ int main(int argc, char *argv[])
     {
         printf("Usage: %s <input file>\n", argv[0]);
         exit(1);
-    }
 
+    }
     CircularQueue *processes = (CircularQueue *)malloc(sizeof(CircularQueue));
     initQueue(processes);
 

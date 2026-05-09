@@ -38,6 +38,111 @@ void runHPF(int msgq_id);
 void runRR(int msgq_id, int quantum, int nru_reset_quantums);
 void load_process_requests(PCB *pcb);
 
+static int parse_request_address(const char *address_text)
+{
+    for (int i = 0; address_text[i] != '\0'; i++)
+    {
+        if (address_text[i] != '0' && address_text[i] != '1')
+            return (int)strtol(address_text, NULL, 10);
+    }
+
+    return (int)strtol(address_text, NULL, 2);
+}
+
+typedef struct BlockedNode
+{
+    PCB *pcb;
+    int fault_time;
+    int finish_time;
+    int virtual_page;
+    int frame;
+    char op;
+    struct BlockedNode *next;
+} BlockedNode;
+
+static void add_blocked_process(BlockedNode **blocked_list, PCB *pcb, int fault_time, int finish_time, int virtual_page, int frame, char op)
+{
+    BlockedNode *node = (BlockedNode *)malloc(sizeof(BlockedNode));
+    if (node == NULL)
+    {
+        perror("malloc failed for blocked process");
+        return;
+    }
+
+    node->pcb = pcb;
+    node->fault_time = fault_time;
+    node->finish_time = finish_time;
+    node->virtual_page = virtual_page;
+    node->frame = frame;
+    node->op = op;
+    node->next = NULL;
+
+    if (*blocked_list == NULL || finish_time < (*blocked_list)->finish_time)
+    {
+        node->next = *blocked_list;
+        *blocked_list = node;
+        return;
+    }
+
+    BlockedNode *cur = *blocked_list;
+    while (cur->next != NULL && cur->next->finish_time <= finish_time)
+        cur = cur->next;
+
+    node->next = cur->next;
+    cur->next = node;
+}
+
+static void release_finished_disk_requests(BlockedNode **blocked_list, PCBCircularQueue *readyQueue, MMU *mmu, int now)
+{
+    while (*blocked_list != NULL && (*blocked_list)->finish_time <= now)
+    {
+        BlockedNode *done = *blocked_list;
+        *blocked_list = done->next;
+
+        if (mmu_complete_page_load(mmu, done->pcb, done->virtual_page, done->op, done->frame, now) == -1)
+        {
+            printf("No frame available for faulted page of process %d\n", done->pcb->id);
+            free(done);
+            continue;
+        }
+
+        done->pcb->state = READY;
+        enqueuePCB(readyQueue, done->pcb);
+        free(done);
+    }
+}
+
+static void free_blocked_list(BlockedNode *blocked_list)
+{
+    while (blocked_list != NULL)
+    {
+        BlockedNode *next = blocked_list->next;
+        free(blocked_list);
+        blocked_list = next;
+    }
+}
+
+static int prepare_process_memory(MMU *mmu, PCB *pcb, int now)
+{
+    if (pcb->page_table_frame != -1)
+        return 1;
+
+    pcb->page_table_frame = mmu_allocate_page_table(mmu, pcb->id);
+    if (pcb->page_table_frame == -1)
+    {
+        printf("No frame available for page table of process %d\n", pcb->id);
+        return 0;
+    }
+
+    if (mmu_load_initial_page(mmu, pcb, now) == -1)
+    {
+        printf("No frame available for initial page of process %d\n", pcb->id);
+        return 0;
+    }
+
+    return 1;
+}
+
 int main(int argc, char * argv[])
 {
     avgWTA = 0.0;
@@ -454,10 +559,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
     PCB *currentProcess  = NULL;
     PCB *nextAfterSwitch = NULL;
 
-    PCB *blockedProcess = NULL;
-    int diskFinishTime = -1;
-    int faultAddress = -1;
-    char faultOp = 'r';
+    BlockedNode *blocked_list = NULL;
 
     int allProcessesSent = 0;
     int lastClk = -1;
@@ -535,11 +637,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                     pcb->page_table[i].modified = 0;
                 }
 
-                pcb->page_table_frame = mmu_allocate_page_table(&mmu, pcb->id);
-                if (pcb->page_table_frame == -1)
-                {
-                    printf("No frame available for page table of process %d\n", pcb->id);
-                }
+                pcb->page_table_frame = -1;
 
                 pcb->requests = NULL;
                 pcb->request_count = 0;
@@ -558,16 +656,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
         }
         lastClk = now;
 
-        if (blockedProcess != NULL && now >= diskFinishTime)
-        {
-            blockedProcess->state = READY;
-            enqueuePCB(readyQueue, blockedProcess);
-
-            blockedProcess = NULL;
-            diskFinishTime = -1;
-            faultAddress = -1;
-            faultOp = 'r';
-        }
+        release_finished_disk_requests(&blocked_list, readyQueue, &mmu, now);
 
         if (currentProcess != NULL)
         {
@@ -654,13 +743,15 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                     kill(currentProcess->pid, SIGSTOP);
                     currentProcess->state = BLOCKED;
 
-                    blockedProcess = currentProcess;
-                    faultAddress = req.address;
-                    faultOp = req.op;
-
                     int disk_cost = 10;
-                    mmu_load_page(&mmu, blockedProcess, faultAddress / PAGE_SIZE_BYTES, faultOp, now, &disk_cost);
-                    diskFinishTime = now + disk_cost;
+                    int frame = mmu_reserve_page_frame(&mmu, currentProcess, req.address / PAGE_SIZE_BYTES, req.op, &disk_cost);
+                    if (frame == -1)
+                    {
+                        printf("No frame available for faulted page of process %d\n", currentProcess->id);
+                        disk_cost = 10;
+                    }
+
+                    add_blocked_process(&blocked_list, currentProcess, now, now + disk_cost, req.address / PAGE_SIZE_BYTES, frame, req.op);
 
                     mmu_account_quantum(&mmu);
                     currentProcess = NULL;
@@ -758,22 +849,20 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                     exit(1);
                 }
 
+                if (!prepare_process_memory(&mmu, next, now))
+                {
+                    kill(pid, SIGTERM);
+                    waitpid(pid, NULL, 0);
+                    free(next);
+                    continue;
+                }
+
                 next->pid = pid;
                 next->start_time = now;
                 next->last_start_time = now;
                 next->state = RUNNING;
                 currentProcess = next;
                 quantumStart = now;
-
-                if (next->limit > 0 && !next->page_table[0].present)
-                {
-                    char va_bin[11];
-                    int_to_binary_str(0, va_bin, 10);
-                    fprintf(memoryLog, "PageFault upon VA %s from process %d\n", va_bin, next->id);
-                    fflush(memoryLog);
-                    int disk_cost = 10;
-                    mmu_load_page(&mmu, next, 0, 'r', now, &disk_cost);
-                }
 
                 int wait = now - next->arrival_time - next->executed_time;
                 if (wait < 0)
@@ -838,22 +927,20 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                     exit(1);
                 }
 
+                if (!prepare_process_memory(&mmu, next, now))
+                {
+                    kill(pid, SIGTERM);
+                    waitpid(pid, NULL, 0);
+                    free(next);
+                    continue;
+                }
+
                 next->pid = pid;
                 next->start_time = now;
                 next->last_start_time = now;
                 next->state = RUNNING;
                 currentProcess = next;
                 quantumStart = now;
-
-                if (next->limit > 0 && !next->page_table[0].present)
-                {
-                    char va_bin[11];
-                    int_to_binary_str(0, va_bin, 10);
-                    fprintf(memoryLog, "PageFault upon VA %s from process %d\n", va_bin, next->id);
-                    fflush(memoryLog);
-                    int disk_cost = 10;
-                    mmu_load_page(&mmu, next, 0, 'r', now, &disk_cost);
-                }
 
                 int wait = now - next->arrival_time - next->executed_time;
                 if (wait < 0)
@@ -896,7 +983,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
         if (allProcessesSent &&
             currentProcess == NULL &&
             nextAfterSwitch == NULL &&
-            blockedProcess == NULL &&
+            blocked_list == NULL &&
             !switching &&
             isPCBQueueEmpty(readyQueue))
         {
@@ -906,6 +993,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
 
     fclose(logFile);
     fclose(memoryLog);
+    free_blocked_list(blocked_list);
     free(readyQueue);
 }
 
@@ -945,7 +1033,7 @@ void load_process_requests(PCB *pcb)
                 pcb->requests = realloc(pcb->requests, sizeof(MemoryRequest) * capacity);
             }
 
-            int address = strtol(addressBinary, NULL, 2);
+            int address = parse_request_address(addressBinary);
 
             pcb->requests[pcb->request_count].time = time;
             pcb->requests[pcb->request_count].address = address;

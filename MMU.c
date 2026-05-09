@@ -2,12 +2,26 @@
 
 static void int_to_binary_str(int val, char *buf, int bits)
 {
-    buf[bits] = '\0';
+    if (val == 0)
+    {
+        buf[0] = '0';
+        buf[1] = '\0';
+        return;
+    }
+
+    int pos = 0;
+    int started = 0;
+
     for (int i = bits - 1; i >= 0; i--)
     {
-        buf[i] = (val & 1) ? '1' : '0';
-        val >>= 1;
+        int bit = (val >> i) & 1;
+        if (bit)
+            started = 1;
+        if (started)
+            buf[pos++] = bit ? '1' : '0';
     }
+
+    buf[pos] = '\0';
 }
 
 static int frame_nru_class(const FrameInfo *f)
@@ -16,6 +30,84 @@ static int frame_nru_class(const FrameInfo *f)
     if (f->referenced == 0 && f->modified == 1) return 1;
     if (f->referenced == 1 && f->modified == 0) return 2;
     return 3;
+}
+
+static int mmu_is_nru_candidate(const FrameInfo *f)
+{
+    return f->type == FRAME_DATA &&
+           f->owner_page_table != NULL &&
+           f->owner_pid != -1 &&
+           f->virtual_page >= 0;
+}
+
+static void mmu_log_swap_out(MMU *mmu, int frame)
+{
+    fprintf(mmu->memory_log, "Swapping out page %d to disk\n", frame);
+    fflush(mmu->memory_log);
+}
+
+static void mmu_invalidate_frame_owner(MMU *mmu, int frame)
+{
+    if (mmu->frames[frame].owner_page_table != NULL)
+    {
+        int old_vpage = mmu->frames[frame].virtual_page;
+        mmu->frames[frame].owner_page_table[old_vpage].present = 0;
+        mmu->frames[frame].owner_page_table[old_vpage].frame_number = -1;
+        mmu->frames[frame].owner_page_table[old_vpage].referenced = 0;
+        mmu->frames[frame].owner_page_table[old_vpage].modified = 0;
+    }
+}
+
+static int mmu_prepare_frame_for_data_page(MMU *mmu, int *disk_ticks, int log_events)
+{
+    int frame = mmu_allocate_frame(mmu);
+
+    if (frame != -1)
+    {
+        if (log_events)
+            fprintf(mmu->memory_log, "Free Physical page %d allocated\n", frame);
+        if (disk_ticks) *disk_ticks = 10;
+        return frame;
+    }
+
+    frame = mmu_select_nru_victim(mmu);
+    if (frame == -1)
+        return -1;
+
+    if (log_events)
+        mmu_log_swap_out(mmu, frame);
+
+    if (mmu->frames[frame].modified)
+    {
+        if (disk_ticks) *disk_ticks = 20;
+    }
+    else
+    {
+        if (disk_ticks) *disk_ticks = 10;
+    }
+
+    mmu_invalidate_frame_owner(mmu, frame);
+    return frame;
+}
+
+static int mmu_map_data_page(MMU *mmu, PCB *pcb, int virtual_page, char op, int frame)
+{
+    if (virtual_page < 0 || virtual_page >= pcb->limit)
+        return -1;
+
+    mmu->frames[frame].type = FRAME_DATA;
+    mmu->frames[frame].owner_pid = pcb->id;
+    mmu->frames[frame].virtual_page = virtual_page;
+    mmu->frames[frame].referenced = 1;
+    mmu->frames[frame].modified = (op == 'w');
+    mmu->frames[frame].owner_page_table = pcb->page_table;
+
+    pcb->page_table[virtual_page].frame_number = frame;
+    pcb->page_table[virtual_page].present = 1;
+    pcb->page_table[virtual_page].referenced = 1;
+    pcb->page_table[virtual_page].modified = (op == 'w');
+
+    return frame;
 }
 
 void mmu_init(MMU *mmu, int nru_reset_quantums, FILE *memory_log)
@@ -51,7 +143,7 @@ int mmu_select_nru_victim(MMU *mmu)
     int best_class = 5;
     for (int i = 0; i < FRAME_COUNT; ++i)
     {
-        if (mmu->frames[i].type != FRAME_DATA)
+        if (!mmu_is_nru_candidate(&mmu->frames[i]))
             continue;
         int c = frame_nru_class(&mmu->frames[i]);
         if (c < best_class)
@@ -65,7 +157,7 @@ int mmu_select_nru_victim(MMU *mmu)
 
     for (int i = 0; i < FRAME_COUNT; ++i)
     {
-        if (mmu->frames[i].type != FRAME_DATA)
+        if (!mmu_is_nru_candidate(&mmu->frames[i]))
             continue;
         if (frame_nru_class(&mmu->frames[i]) == best_class)
             return i;
@@ -79,7 +171,14 @@ void mmu_clear_referenced_bits(MMU *mmu)
     for (int i = 0; i < FRAME_COUNT; ++i)
     {
         if (mmu->frames[i].type == FRAME_DATA)
+        {
             mmu->frames[i].referenced = 0;
+            if (mmu->frames[i].owner_page_table != NULL)
+            {
+                int vpage = mmu->frames[i].virtual_page;
+                mmu->frames[i].owner_page_table[vpage].referenced = 0;
+            }
+        }
     }
 }
 
@@ -111,20 +210,9 @@ int mmu_allocate_page_table(MMU *mmu, int pid)
         if (frame == -1)
             return -1;
 
-        if (mmu->frames[frame].modified)
-        {
-            fprintf(mmu->memory_log, "Swapping out page %d to disk\n", frame);
-            fflush(mmu->memory_log);
-        }
+        mmu_log_swap_out(mmu, frame);
 
-        if (mmu->frames[frame].owner_page_table != NULL)
-        {
-            int old_vpage = mmu->frames[frame].virtual_page;
-            mmu->frames[frame].owner_page_table[old_vpage].present = 0;
-            mmu->frames[frame].owner_page_table[old_vpage].frame_number = -1;
-            mmu->frames[frame].owner_page_table[old_vpage].referenced = 0;
-            mmu->frames[frame].owner_page_table[old_vpage].modified = 0;
-        }
+        mmu_invalidate_frame_owner(mmu, frame);
     }
 
     mmu->frames[frame].type = FRAME_PAGE_TABLE;
@@ -136,52 +224,31 @@ int mmu_allocate_page_table(MMU *mmu, int pid)
 
     return frame;
 }
-int mmu_load_page(MMU *mmu, PCB *pcb, int virtual_page, char op, int now, int *disk_ticks)
+
+int mmu_reserve_page_frame(MMU *mmu, PCB *pcb, int virtual_page, char op, int *disk_ticks)
 {
-    int frame = mmu_allocate_frame(mmu);
+    int frame = mmu_prepare_frame_for_data_page(mmu, disk_ticks, 1);
+    if (frame == -1)
+        return -1;
 
-    if (frame != -1)
-    {
-        fprintf(mmu->memory_log, "Free Physical page %d allocated\n", frame);
-        if (disk_ticks) *disk_ticks = 10;
-    }
-    else
-    {
-        frame = mmu_select_nru_victim(mmu);
-        if (frame == -1)
-            return -1;
-
-        if (mmu->frames[frame].modified)
-        {
-            fprintf(mmu->memory_log, "Swapping out page %d to disk\n", frame);
-            if (disk_ticks) *disk_ticks = 20;
-        }
-        else
-        {
-            if (disk_ticks) *disk_ticks = 10;
-        }
-
-        if (mmu->frames[frame].owner_page_table != NULL)
-        {
-            int old_vpage = mmu->frames[frame].virtual_page;
-            mmu->frames[frame].owner_page_table[old_vpage].present = 0;
-            mmu->frames[frame].owner_page_table[old_vpage].frame_number = -1;
-            mmu->frames[frame].owner_page_table[old_vpage].referenced = 0;
-            mmu->frames[frame].owner_page_table[old_vpage].modified = 0;
-        }
-    }
-
-    mmu->frames[frame].type = FRAME_DATA;
+    mmu->frames[frame].type = FRAME_RESERVED;
     mmu->frames[frame].owner_pid = pcb->id;
     mmu->frames[frame].virtual_page = virtual_page;
-    mmu->frames[frame].referenced = 1;
+    mmu->frames[frame].referenced = 0;
     mmu->frames[frame].modified = (op == 'w');
     mmu->frames[frame].owner_page_table = pcb->page_table;
 
-    pcb->page_table[virtual_page].frame_number = frame;
-    pcb->page_table[virtual_page].present = 1;
-    pcb->page_table[virtual_page].referenced = 1;
-    pcb->page_table[virtual_page].modified = (op == 'w');
+    fflush(mmu->memory_log);
+    return frame;
+}
+
+int mmu_complete_page_load(MMU *mmu, PCB *pcb, int virtual_page, char op, int frame, int now)
+{
+    if (frame < 0 || frame >= FRAME_COUNT || mmu->frames[frame].type != FRAME_RESERVED)
+        return -1;
+
+    if (mmu_map_data_page(mmu, pcb, virtual_page, op, frame) == -1)
+        return -1;
 
     int disk_address = pcb->base + virtual_page;
 
@@ -193,6 +260,30 @@ int mmu_load_page(MMU *mmu, PCB *pcb, int virtual_page, char op, int now, int *d
     fflush(mmu->memory_log);
 
     return frame;
+}
+
+int mmu_load_page(MMU *mmu, PCB *pcb, int virtual_page, char op, int now, int *disk_ticks)
+{
+    int frame = mmu_reserve_page_frame(mmu, pcb, virtual_page, op, disk_ticks);
+    if (frame == -1)
+        return -1;
+
+    return mmu_complete_page_load(mmu, pcb, virtual_page, op, frame, now);
+}
+
+int mmu_load_initial_page(MMU *mmu, PCB *pcb, int now)
+{
+    (void)now;
+
+    if (pcb->limit <= 0)
+        return 0;
+
+    int disk_ticks = 0;
+    int frame = mmu_prepare_frame_for_data_page(mmu, &disk_ticks, 0);
+    if (frame == -1)
+        return -1;
+
+    return mmu_map_data_page(mmu, pcb, 0, 'r', frame);
 }
 int mmu_access_memory(MMU *mmu, PCB *pcb, int virtual_address, char op, int now)
 {
