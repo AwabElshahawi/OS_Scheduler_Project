@@ -305,8 +305,9 @@ int mmu_load_initial_page(MMU *mmu, PCB *pcb, int now)
 
     return frame;
 }
-int mmu_access_memory(MMU *mmu, PCB *pcb, int virtual_address, char op, int now)
+int mmu_access_memory(MMU *mmu, PCB *pcb, int virtual_address, char op, int now, int address_format)
 {
+    (void)now;
     int virtual_page = virtual_address / PAGE_SIZE_BYTES;
 
     if (virtual_page < 0 || virtual_page >= pcb->limit)
@@ -314,12 +315,26 @@ int mmu_access_memory(MMU *mmu, PCB *pcb, int virtual_address, char op, int now)
 
      if (!pcb->page_table[virtual_page].present)
     {
-        fprintf(
-            mmu->memory_log,
-            "PageFault upon VA 0x%x from process %d\n",
-            virtual_address,
-            pcb->id
-        );
+        if (address_format == ADDRESS_FORMAT_BINARY)
+        {
+            char va_bin[11];
+            int_to_binary_str(virtual_address, va_bin, 10);
+            fprintf(
+                mmu->memory_log,
+                "PageFault upon VA %s from process %d\n",
+                va_bin,
+                pcb->id
+            );
+        }
+        else
+        {
+            fprintf(
+                mmu->memory_log,
+                "PageFault upon VA 0x%x from process %d\n",
+                virtual_address,
+                pcb->id
+            );
+        }
         fflush(mmu->memory_log);
         return 0;
     }

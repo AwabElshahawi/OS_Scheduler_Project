@@ -1,2 +1,0 @@
-#time address r/w
-0      0000    w

@@ -54,8 +54,12 @@ typedef struct MemoryRequest
 {
     int time;
     int address;
+    int address_format;
     char op;
 } MemoryRequest;
+
+#define ADDRESS_FORMAT_HEX 0
+#define ADDRESS_FORMAT_BINARY 1
 
 typedef struct PCB
 {

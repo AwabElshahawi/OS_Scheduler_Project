@@ -3,6 +3,7 @@
 #include "queue.h"
 #include "PCBqueue.h"
 #include <math.h>
+#include <string.h>
 #include "MMU.h"
 
 static void int_to_binary_str(int val, char *buf, int bits)
@@ -38,15 +39,20 @@ void runHPF(int msgq_id);
 void runRR(int msgq_id, int quantum, int nru_reset_quantums);
 void load_process_requests(PCB *pcb);
 
-static int parse_request_address(const char *address_text)
+static int parse_request_address(const char *address_text, int format)
 {
-    for (int i = 0; address_text[i] != '\0'; i++)
+    if (format == ADDRESS_FORMAT_BINARY)
     {
-        if (address_text[i] != '0' && address_text[i] != '1')
-            return (int)strtol(address_text, NULL, 10);
+        return (int)strtol(address_text, NULL, 2);
     }
 
-    return (int)strtol(address_text, NULL, 2);
+    const char *hex_start = strchr(address_text, 'x');
+    if (hex_start == NULL)
+        hex_start = strchr(address_text, 'X');
+    if (hex_start != NULL)
+        return (int)strtol(hex_start + 1, NULL, 16);
+
+    return (int)strtol(address_text, NULL, 16);
 }
 
 static int memory_request_due(int request_time, int cpu_consumed)
@@ -734,7 +740,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
             {
                 MemoryRequest req = currentProcess->requests[currentProcess->next_request_index];
 
-                int accessResult = mmu_access_memory(&mmu, currentProcess, req.address, req.op, now);
+                int accessResult = mmu_access_memory(&mmu, currentProcess, req.address, req.op, now, req.address_format);
                 currentProcess->next_request_index++;
 
                 if (accessResult == 0)
@@ -1024,10 +1030,20 @@ void load_process_requests(PCB *pcb)
     pcb->request_count = 0;
 
     char line[100];
+    int address_format = ADDRESS_FORMAT_HEX;
 
     while (fgets(line, sizeof(line), f))
     {
-        if (line[0] == '#' || line[0] == '\n')
+        if (line[0] == '#')
+        {
+            if (strstr(line, "addressb") != NULL)
+                address_format = ADDRESS_FORMAT_BINARY;
+            else if (strstr(line, "address") != NULL)
+                address_format = ADDRESS_FORMAT_HEX;
+            continue;
+        }
+
+        if (line[0] == '\n')
             continue;
 
         int time;
@@ -1042,10 +1058,11 @@ void load_process_requests(PCB *pcb)
                 pcb->requests = realloc(pcb->requests, sizeof(MemoryRequest) * capacity);
             }
 
-            int address = parse_request_address(addressBinary);
+            int address = parse_request_address(addressBinary, address_format);
 
             pcb->requests[pcb->request_count].time = time;
             pcb->requests[pcb->request_count].address = address;
+            pcb->requests[pcb->request_count].address_format = address_format;
             pcb->requests[pcb->request_count].op = op;
             pcb->request_count++;
         }
