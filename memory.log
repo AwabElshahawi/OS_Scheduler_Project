@@ -1,84 +1,9 @@
-PageFault upon VA 10000 from process 1
+Free Physical page 0 allocated
+Free Physical page 1 allocated
+At time 1 disk address 0 for process 1 is loaded into memory page 1.
+PageFault upon VA 0x10 from process 1
 Free Physical page 2 allocated
-PageFault upon VA 10000 from process 2
-Free Physical page 5 allocated
-PageFault upon VA 10000 from process 3
-Free Physical page 8 allocated
-PageFault upon VA 10000 from process 4
-Free Physical page 11 allocated
-At time 12 disk address 1 for process 1 is loaded into memory page 2.
-PageFault upon VA 100000 from process 1
-Free Physical page 12 allocated
-At time 15 disk address 21 for process 2 is loaded into memory page 5.
-PageFault upon VA 100000 from process 2
-Free Physical page 13 allocated
-At time 18 disk address 41 for process 3 is loaded into memory page 8.
-PageFault upon VA 100000 from process 3
-Free Physical page 14 allocated
-At time 21 disk address 61 for process 4 is loaded into memory page 11.
-PageFault upon VA 100000 from process 4
-Free Physical page 15 allocated
-At time 23 disk address 2 for process 1 is loaded into memory page 12.
-PageFault upon VA 110000 from process 1
-Free Physical page 16 allocated
-At time 26 disk address 22 for process 2 is loaded into memory page 13.
-PageFault upon VA 110000 from process 2
-Free Physical page 17 allocated
-At time 29 disk address 42 for process 3 is loaded into memory page 14.
-PageFault upon VA 110000 from process 3
-Free Physical page 18 allocated
-At time 32 disk address 62 for process 4 is loaded into memory page 15.
-PageFault upon VA 110000 from process 4
-Free Physical page 19 allocated
-At time 34 disk address 3 for process 1 is loaded into memory page 16.
-PageFault upon VA 1000000 from process 1
-Free Physical page 20 allocated
-At time 37 disk address 23 for process 2 is loaded into memory page 17.
-PageFault upon VA 1000000 from process 2
-Free Physical page 21 allocated
-At time 40 disk address 43 for process 3 is loaded into memory page 18.
-PageFault upon VA 1000000 from process 3
-Free Physical page 22 allocated
-At time 43 disk address 63 for process 4 is loaded into memory page 19.
-PageFault upon VA 1000000 from process 4
-Free Physical page 23 allocated
-At time 45 disk address 4 for process 1 is loaded into memory page 20.
-PageFault upon VA 1010000 from process 1
-Free Physical page 24 allocated
-At time 48 disk address 24 for process 2 is loaded into memory page 21.
-PageFault upon VA 1010000 from process 2
-Free Physical page 25 allocated
-At time 51 disk address 44 for process 3 is loaded into memory page 22.
-PageFault upon VA 1010000 from process 3
-Free Physical page 26 allocated
-At time 54 disk address 64 for process 4 is loaded into memory page 23.
-PageFault upon VA 1010000 from process 4
-Free Physical page 27 allocated
-At time 56 disk address 5 for process 1 is loaded into memory page 24.
-PageFault upon VA 1100000 from process 1
-Free Physical page 28 allocated
-At time 59 disk address 25 for process 2 is loaded into memory page 25.
-PageFault upon VA 1100000 from process 2
-Free Physical page 29 allocated
-At time 62 disk address 45 for process 3 is loaded into memory page 26.
-PageFault upon VA 1100000 from process 3
-Free Physical page 30 allocated
-At time 65 disk address 65 for process 4 is loaded into memory page 27.
-PageFault upon VA 1100000 from process 4
-Free Physical page 31 allocated
-At time 67 disk address 6 for process 1 is loaded into memory page 28.
-PageFault upon VA 1110000 from process 1
-Swapping out page 1 to disk
-At time 70 disk address 26 for process 2 is loaded into memory page 29.
-PageFault upon VA 1110000 from process 2
-Swapping out page 2 to disk
-At time 73 disk address 46 for process 3 is loaded into memory page 30.
-PageFault upon VA 1110000 from process 3
-Swapping out page 4 to disk
-At time 76 disk address 66 for process 4 is loaded into memory page 31.
-PageFault upon VA 1110000 from process 4
-Swapping out page 5 to disk
-At time 78 disk address 7 for process 1 is loaded into memory page 1.
-At time 81 disk address 27 for process 2 is loaded into memory page 2.
-At time 84 disk address 47 for process 3 is loaded into memory page 4.
-At time 87 disk address 67 for process 4 is loaded into memory page 5.
+Free Physical page 3 allocated
+Free Physical page 4 allocated
+At time 5 disk address 50 for process 2 is loaded into memory page 4.
+At time 14 disk address 1 for process 1 is loaded into memory page 2.

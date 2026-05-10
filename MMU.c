@@ -46,6 +46,12 @@ static void mmu_log_swap_out(MMU *mmu, int frame)
     fflush(mmu->memory_log);
 }
 
+static void mmu_log_frame_allocated(MMU *mmu, int frame)
+{
+    fprintf(mmu->memory_log, "Free Physical page %d allocated\n", frame);
+    fflush(mmu->memory_log);
+}
+
 static void mmu_invalidate_frame_owner(MMU *mmu, int frame)
 {
     if (mmu->frames[frame].owner_page_table != NULL)
@@ -65,7 +71,7 @@ static int mmu_prepare_frame_for_data_page(MMU *mmu, int *disk_ticks, int log_ev
     if (frame != -1)
     {
         if (log_events)
-            fprintf(mmu->memory_log, "Free Physical page %d allocated\n", frame);
+            mmu_log_frame_allocated(mmu, frame);
         if (disk_ticks) *disk_ticks = 10;
         return frame;
     }
@@ -203,6 +209,7 @@ void mmu_free_frame(MMU *mmu, int frame)
 int mmu_allocate_page_table(MMU *mmu, int pid)
 {
     int frame = mmu_allocate_frame(mmu);
+    int was_free_frame = (frame != -1);
 
     if (frame == -1)
     {
@@ -221,6 +228,9 @@ int mmu_allocate_page_table(MMU *mmu, int pid)
     mmu->frames[frame].referenced = 0;
     mmu->frames[frame].modified = 0;
     mmu->frames[frame].owner_page_table = NULL;
+
+    if (was_free_frame)
+        mmu_log_frame_allocated(mmu, frame);
 
     return frame;
 }
@@ -273,17 +283,27 @@ int mmu_load_page(MMU *mmu, PCB *pcb, int virtual_page, char op, int now, int *d
 
 int mmu_load_initial_page(MMU *mmu, PCB *pcb, int now)
 {
-    (void)now;
-
     if (pcb->limit <= 0)
         return 0;
 
     int disk_ticks = 0;
-    int frame = mmu_prepare_frame_for_data_page(mmu, &disk_ticks, 0);
+    int frame = mmu_prepare_frame_for_data_page(mmu, &disk_ticks, 1);
     if (frame == -1)
         return -1;
 
-    return mmu_map_data_page(mmu, pcb, 0, 'r', frame);
+    if (mmu_map_data_page(mmu, pcb, 0, 'r', frame) == -1)
+        return -1;
+
+    int disk_address = pcb->base;
+
+    fprintf(
+        mmu->memory_log,
+        "At time %d disk address %d for process %d is loaded into memory page %d.\n",
+        now, disk_address, pcb->id, frame
+    );
+    fflush(mmu->memory_log);
+
+    return frame;
 }
 int mmu_access_memory(MMU *mmu, PCB *pcb, int virtual_address, char op, int now)
 {
@@ -294,12 +314,10 @@ int mmu_access_memory(MMU *mmu, PCB *pcb, int virtual_address, char op, int now)
 
      if (!pcb->page_table[virtual_page].present)
     {
-        char va_bin[11];
-        int_to_binary_str(virtual_address, va_bin, 10);
         fprintf(
             mmu->memory_log,
-            "PageFault upon VA %s from process %d\n",
-            va_bin,
+            "PageFault upon VA 0x%x from process %d\n",
+            virtual_address,
             pcb->id
         );
         fflush(mmu->memory_log);

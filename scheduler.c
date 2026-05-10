@@ -49,6 +49,14 @@ static int parse_request_address(const char *address_text)
     return (int)strtol(address_text, NULL, 2);
 }
 
+static int memory_request_due(int request_time, int cpu_consumed)
+{
+    if (request_time == 0)
+        return cpu_consumed >= 0;
+
+    return request_time < cpu_consumed;
+}
+
 typedef struct BlockedNode
 {
     PCB *pcb;
@@ -722,7 +730,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
             int cpuConsumed = currentProcess->executed_time + (now - currentProcess->last_start_time);
 
             while (currentProcess->next_request_index < currentProcess->request_count &&
-                   currentProcess->requests[currentProcess->next_request_index].time <= cpuConsumed)
+                   memory_request_due(currentProcess->requests[currentProcess->next_request_index].time, cpuConsumed))
             {
                 MemoryRequest req = currentProcess->requests[currentProcess->next_request_index];
 
@@ -731,6 +739,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
 
                 if (accessResult == 0)
                 {
+                    int faultTime = now;
                     int ran = now - currentProcess->last_start_time;
                     if (ran < 0)
                         ran = 0;
@@ -751,7 +760,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                         disk_cost = 10;
                     }
 
-                    add_blocked_process(&blocked_list, currentProcess, now, now + disk_cost, req.address / PAGE_SIZE_BYTES, frame, req.op);
+                    add_blocked_process(&blocked_list, currentProcess, faultTime, faultTime + disk_cost, req.address / PAGE_SIZE_BYTES, frame, req.op);
 
                     mmu_account_quantum(&mmu);
                     currentProcess = NULL;
@@ -763,7 +772,7 @@ void runRR(int msgq_id, int quantum, int nru_reset_quantums)
                         dequeuePCB(readyQueue, &next);
 
                         switching = 1;
-                        switchEndTime = now + 1;
+                        switchEndTime = faultTime + 1;
                         nextAfterSwitch = next;
                     }
 
